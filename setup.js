@@ -122,6 +122,20 @@ MCP_PERSONALITY=${defaultPersonality}
     // Get absolute path for configurations
     const serverPath = resolve(__dirname, 'src/server.js');
 
+    // Ask about showing credentials
+    console.log('\n🔐 Security Option\n');
+    const showCredentials = await question('Show your credentials in the configuration examples? (y/N): ');
+    const shouldShowCredentials = showCredentials.toLowerCase() === 'y';
+    
+    // Prepare display values
+    const displayUrl = shouldShowCredentials ? wpUrl.replace(/\/$/, '') : 'https://your-site.com';
+    const displayUsername = shouldShowCredentials ? wpUsername : 'your-username';
+    const displayPassword = shouldShowCredentials ? wpAppPassword : 'your-app-password';
+    
+    if (!shouldShowCredentials) {
+      console.log('\n✓ Credentials will be masked in the examples below.');
+    }
+
     // Show Claude Desktop configuration
     console.log('\n📱 Claude Desktop Configuration\n');
     console.log('Add this to your Claude Desktop config file:');
@@ -179,6 +193,17 @@ MCP_PERSONALITY=${defaultPersonality}
 
     // Final instructions
     console.log('\n🎉 Setup Complete!\n');
+    
+    // Show actual credentials if user opted to see them
+    if (shouldShowCredentials) {
+      console.log('📋 Your WordPress credentials for reference:\n');
+      console.log(`   URL: ${wpUrl.replace(/\/$/, '')}`);
+      console.log(`   Username: ${wpUsername}`);
+      console.log(`   Password: ${wpAppPassword}`);
+      console.log(`   Default Personality: ${defaultPersonality}\n`);
+      console.log('⚠️  Keep these credentials secure!\n');
+    }
+    
     console.log('Next steps:');
     console.log('1. Copy the configuration above to your Claude Desktop or Claude Code settings');
     console.log('2. Restart Claude to load the MCP server');
