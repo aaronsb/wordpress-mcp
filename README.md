@@ -55,6 +55,13 @@ The setup wizard will:
 
 **Important**: The personality you choose determines which tools are available, but your actual WordPress user permissions always take precedence.
 
+## Documentation
+
+- **[Architecture Overview](ARCHITECTURE.md)** - Technical details about the semantic operation engine
+- **[Customization Guide](CUSTOMIZATION.md)** - Create custom personalities and tool mappings
+- **[WordPress MCP Analysis](wordpress-mcp-analysis-report.md)** - Why we built this differently
+- **[Test Documentation](tests/README.md)** - Running and understanding the test suite
+
 ## How It Works
 
 1. **Features** are defined as standalone modules in `src/features/`
@@ -245,65 +252,78 @@ This MCP server is **not just an API wrapper**. It provides intelligent semantic
 
 ### Document Session State Flow
 
-```
-┌─────────────────┐
-│   WordPress     │
-│   HTML Post     │
-└────────┬────────┘
-         │ pull-for-editing
-         ▼
-┌─────────────────┐     ┌──────────────────┐
-│ HTML→Markdown   │────▶│ Document Session │
-│  Conversion     │     │ (Handle: abc123) │
-└─────────────────┘     └────────┬─────────┘
-                                 │
-                                 ▼
-                    ┌────────────────────────┐
-                    │   Local Edit State     │
-                    │  - Clean Markdown      │
-                    │  - Line Numbers        │
-                    │  - No HTML Entities    │
-                    └──────────┬─────────────┘
-                               │
-        ┌──────────────────────┼──────────────────────┐
-        ▼                      ▼                      ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│edit-document │     │insert-at-line│     │search-replace│
-│    -line     │     │              │     │              │
-└──────────────┘     └──────────────┘     └──────────────┘
-        │                      │                      │
-        └──────────────────────┼──────────────────────┘
-                               ▼
-                    ┌────────────────────────┐
-                    │  Modified Local State  │
-                    │  (Multiple Edits)      │
-                    └──────────┬─────────────┘
-                               │ sync-to-wordpress
-                               ▼
-┌─────────────────┐     ┌──────────────────┐
-│ Markdown→HTML   │────▶│ WordPress Update │
-│  Conversion     │     │ (Single API Call)│
-└─────────────────┘     └──────────────────┘
+```mermaid
+flowchart TB
+    WP[WordPress HTML Post]:::wordpress
+    PFE[pull-for-editing]:::operation
+    H2M[HTML→Markdown Conversion]:::converter
+    DS[Document Session<br/>Handle: abc123]:::session
+    LES[Local Edit State<br/>• Clean Markdown<br/>• Line Numbers<br/>• No HTML Entities]:::state
+    
+    EDL[edit-document-line]:::edit
+    IAL[insert-at-line]:::edit
+    SR[search-replace]:::edit
+    
+    MLS[Modified Local State<br/>Multiple Edits Applied]:::state
+    STW[sync-to-wordpress]:::operation
+    M2H[Markdown→HTML Conversion]:::converter
+    WPU[WordPress Update<br/>Single API Call]:::wordpress
+    
+    WP -->|1| PFE
+    PFE --> H2M
+    H2M --> DS
+    DS --> LES
+    LES --> EDL
+    LES --> IAL
+    LES --> SR
+    EDL --> MLS
+    IAL --> MLS
+    SR --> MLS
+    MLS -->|2| STW
+    STW --> M2H
+    M2H --> WPU
+    
+    classDef wordpress fill:#1e40af,stroke:#3730a3,color:#ffffff
+    classDef operation fill:#059669,stroke:#047857,color:#ffffff
+    classDef converter fill:#7c3aed,stroke:#6d28d9,color:#ffffff
+    classDef session fill:#ea580c,stroke:#dc2626,color:#ffffff
+    classDef state fill:#0891b2,stroke:#0e7490,color:#ffffff
+    classDef edit fill:#64748b,stroke:#475569,color:#ffffff
 ```
 
 ### Semantic Operation Mapping
 
-```
-Human Intent                 Semantic Operation          WordPress API Calls
-────────────                 ──────────────────          ───────────────────
-"Create article"      ────▶  draft-article       ────▶  POST /wp/v2/posts
-                                                        + Category lookups
-                                                        + Tag creation
-                                                        + Status setting
-
-"Edit my post"        ────▶  pull-for-editing    ────▶  GET /wp/v2/posts/{id}
-                            + Local edits               + GET categories
-                            + sync-to-wordpress        + GET tags
-                                                        + PUT /wp/v2/posts/{id}
-
-"Review feedback"     ────▶  view-editorial-     ────▶  GET /wp/v2/comments
-                            feedback                    + Filter by post_author
-                                                        + Parse editorial notes
+```mermaid
+flowchart LR
+    subgraph "Human Intent"
+        HI1[Create article]:::intent
+        HI2[Edit my post]:::intent
+        HI3[Review feedback]:::intent
+    end
+    
+    subgraph "Semantic Operations"
+        SO1[draft-article]:::semantic
+        SO2[pull-for-editing<br/>+ edit-document<br/>+ sync-to-wordpress]:::semantic
+        SO3[view-editorial-feedback]:::semantic
+    end
+    
+    subgraph "WordPress API"
+        API1[POST /wp/v2/posts<br/>+ Category lookups<br/>+ Tag creation<br/>+ Status setting]:::api
+        API2[GET /wp/v2/posts/{id}<br/>+ GET categories<br/>+ GET tags<br/>+ PUT /wp/v2/posts/{id}]:::api
+        API3[GET /wp/v2/comments<br/>+ Filter by post_author<br/>+ Parse editorial notes]:::api
+    end
+    
+    HI1 --> SO1
+    HI2 --> SO2
+    HI3 --> SO3
+    
+    SO1 --> API1
+    SO2 --> API2
+    SO3 --> API3
+    
+    classDef intent fill:#10b981,stroke:#059669,color:#ffffff
+    classDef semantic fill:#f59e0b,stroke:#d97706,color:#000000
+    classDef api fill:#6366f1,stroke:#4f46e5,color:#ffffff
 ```
 
 ### Key Architectural Components
@@ -327,6 +347,66 @@ Human Intent                 Semantic Operation          WordPress API Calls
    - Precise line number operations
    - Context-aware search within line ranges
    - Avoids brittle string matching
+
+### Permission Flow
+
+```mermaid
+flowchart TD
+    subgraph "MCP Configuration"
+        P1[Contributor Personality]:::personality
+        P2[Author Personality]:::personality
+        P3[Admin Personality]:::personality
+    end
+    
+    subgraph "Available Tools"
+        T1[Limited Tools<br/>draft, edit, submit]:::tools
+        T2[Extended Tools<br/>+ publish, media]:::tools
+        T3[All Tools<br/>+ bulk ops, categories]:::tools
+    end
+    
+    subgraph "WordPress User"
+        U1[Contributor Account]:::user
+        U2[Author Account]:::user
+        U3[Admin Account]:::user
+    end
+    
+    subgraph "Actual Capabilities"
+        C1[Can only draft]:::capability
+        C2[Can publish own]:::capability
+        C3[Full control]:::capability
+    end
+    
+    P1 --> T1
+    P2 --> T2
+    P3 --> T3
+    
+    T1 --> |Filtered by| U1
+    T1 --> |Filtered by| U2
+    T1 --> |Filtered by| U3
+    
+    T2 --> |Filtered by| U1
+    T2 --> |Filtered by| U2
+    T2 --> |Filtered by| U3
+    
+    T3 --> |Filtered by| U1
+    T3 --> |Filtered by| U2
+    T3 --> |Filtered by| U3
+    
+    U1 --> C1
+    U2 --> C2
+    U3 --> C3
+    
+    WP[WordPress Always Has<br/>Final Authority]:::wordpress
+    C1 --> WP
+    C2 --> WP
+    C3 --> WP
+    
+    classDef personality fill:#8b5cf6,stroke:#7c3aed,color:#ffffff
+    classDef tools fill:#0ea5e9,stroke:#0284c7,color:#ffffff
+    classDef user fill:#f97316,stroke:#ea580c,color:#ffffff
+    classDef capability fill:#22c55e,stroke:#16a34a,color:#000000
+    classDef wordpress fill:#dc2626,stroke:#b91c1c,color:#ffffff
+```
 
 ## Personality Mappings
 
