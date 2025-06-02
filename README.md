@@ -13,9 +13,29 @@ A personality-based Model Context Protocol (MCP) server for WordPress that provi
 - **📝 Content Management**: Create drafts, publish posts, schedule content, manage media
 - **⚡ Map-Based Architecture**: JSON configuration for tool assignments, no hardcoded roles
 
+## Prerequisites
+
+Before using this MCP server, you need:
+
+1. **WordPress Application Password**
+   - Go to your WordPress admin: `Users > Your Profile > Application Passwords`
+   - Create a new application password
+   - Save this password - you'll need it for setup
+
+2. **WordPress Feature API Plugin**
+   - Install the [WordPress Feature API](https://github.com/Automattic/wp-feature-api) plugin
+   - Activate the plugin in your WordPress admin
+   - This enables semantic operations beyond basic REST API
+
+3. **Appropriate WordPress User Permissions**
+   - The MCP server respects your WordPress user's actual permissions
+   - Contributor personality + Admin account = Admin capabilities
+   - Administrator personality + Contributor account = Contributor capabilities only
+   - **WordPress always has final authority on permissions**
+
 ## Quick Start
 
-The fastest way to get started:
+Once prerequisites are met:
 
 ```bash
 # Clone and install
@@ -33,7 +53,7 @@ The setup wizard will:
 3. Create your `.env` configuration file
 4. Generate ready-to-paste configurations for Claude Desktop and Claude Code
 
-Just copy the generated configuration to your Claude settings and you're ready to go!
+**Important**: The personality you choose determines which tools are available, but your actual WordPress user permissions always take precedence.
 
 ## How It Works
 
