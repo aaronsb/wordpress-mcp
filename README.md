@@ -6,7 +6,9 @@ A personality-based Model Context Protocol (MCP) server for WordPress that provi
 
 - **🎭 Personality-Based Tool Mapping**: Three modes (Contributor/Author/Administrator) with role-appropriate tools
 - **🔧 Semantic Operations**: High-level WordPress actions without API complexity  
-- **📁 Temp File Workflow**: cups-mcp style local editing with pull-edit-sync pattern
+- **📁 Document Session Workflow**: Abstracted temp file editing with opaque handles (no filesystem exposure)
+- **🔄 Transparent Format Conversion**: AI edits clean Markdown → WordPress receives formatted HTML
+- **✏️ Flexible Line-Based Editing**: Precise line operations + contextual search/replace
 - **🛡️ WordPress-Native Permissions**: Let WordPress handle all permission enforcement
 - **📝 Content Management**: Create drafts, publish posts, schedule content, manage media
 - **⚡ Map-Based Architecture**: JSON configuration for tool assignments, no hardcoded roles
@@ -172,26 +174,139 @@ Once configured, the WordPress tools will be available in Claude. You can:
 - "Publish my draft with ID 30"
 - "Schedule a post for next Monday at 9 AM"
 
-**Temp File Workflow (Recommended for complex edits):**
-- "Pull post 42 for editing" → Creates local temp file
-- Use read-document and edit-document tools to iterate locally
-- "Sync the temp file back to WordPress" → Single update
+**Advanced Document Session Workflow (Recommended for complex edits):**
+- "Pull post 42 for editing" → Creates editing session with document handle
+- Use flexible editing tools to iterate locally
+- "Sync the session back to WordPress" → Single update with formatted HTML
 
-### Example Temp File Workflow
+### Document Editing Features
+
+**🔄 Transparent Format Conversion:**
+- WordPress HTML → Clean Markdown for AI editing
+- AI edits in Markdown → WordPress receives formatted HTML
+- Preserves **bold**, *italic*, headers, lists, and more
+- No HTML entities or encoding issues
+
+**✏️ Flexible Editing Tools:**
+- `read-document` - View content with line numbers
+- `edit-document-line` - Replace specific lines by number
+- `insert-at-line` - Insert content at precise positions
+- `replace-lines` - Replace multi-line blocks
+- `search-replace` - Context-aware search with line proximity
+- `edit-document` - Traditional string replacement (fallback)
+
+### Example Document Session Workflow
 
 ```
 1. Pull for editing: pull-for-editing postId=42
-   → Creates ~/Documents/wp-post-42-timestamp.md
+   → Returns documentHandle="wp-session-abc123" (no filesystem paths!)
 
-2. Read and edit locally:
-   → read-document filePath=~/Documents/wp-post-42-timestamp.md
-   → edit-document oldString="..." newString="..." 
-   → Multiple local iterations without API calls
+2. Read and edit using various methods:
+   → read-document documentHandle="wp-session-abc123"
+   → edit-document-line lineNumber=5 newLine="Better content"
+   → insert-at-line lineNumber=10 content="New paragraph"
+   → search-replace searchTerm="old" replacement="new" nearLine=15
 
 3. Sync back:
-   → sync-to-wordpress filePath=~/Documents/wp-post-42-timestamp.md
-   → Single WordPress update with all changes
+   → sync-to-wordpress documentHandle="wp-session-abc123"
+   → Single WordPress update with all formatting preserved
 ```
+
+**Key Benefits:**
+- AI never sees filesystem paths (security + abstraction)
+- Edit in clean Markdown without HTML encoding issues
+- WordPress receives properly formatted HTML automatically
+- Line-based editing avoids string matching failures
+- One pull → multiple edits → one push (API efficiency)
+
+## Semantic Architecture
+
+This MCP server is **not just an API wrapper**. It provides intelligent semantic operations that map human workflows to WordPress actions, with sophisticated state management and format conversion.
+
+### Document Session State Flow
+
+```
+┌─────────────────┐
+│   WordPress     │
+│   HTML Post     │
+└────────┬────────┘
+         │ pull-for-editing
+         ▼
+┌─────────────────┐     ┌──────────────────┐
+│ HTML→Markdown   │────▶│ Document Session │
+│  Conversion     │     │ (Handle: abc123) │
+└─────────────────┘     └────────┬─────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────┐
+                    │   Local Edit State     │
+                    │  - Clean Markdown      │
+                    │  - Line Numbers        │
+                    │  - No HTML Entities    │
+                    └──────────┬─────────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        ▼                      ▼                      ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│edit-document │     │insert-at-line│     │search-replace│
+│    -line     │     │              │     │              │
+└──────────────┘     └──────────────┘     └──────────────┘
+        │                      │                      │
+        └──────────────────────┼──────────────────────┘
+                               ▼
+                    ┌────────────────────────┐
+                    │  Modified Local State  │
+                    │  (Multiple Edits)      │
+                    └──────────┬─────────────┘
+                               │ sync-to-wordpress
+                               ▼
+┌─────────────────┐     ┌──────────────────┐
+│ Markdown→HTML   │────▶│ WordPress Update │
+│  Conversion     │     │ (Single API Call)│
+└─────────────────┘     └──────────────────┘
+```
+
+### Semantic Operation Mapping
+
+```
+Human Intent                 Semantic Operation          WordPress API Calls
+────────────                 ──────────────────          ───────────────────
+"Create article"      ────▶  draft-article       ────▶  POST /wp/v2/posts
+                                                        + Category lookups
+                                                        + Tag creation
+                                                        + Status setting
+
+"Edit my post"        ────▶  pull-for-editing    ────▶  GET /wp/v2/posts/{id}
+                            + Local edits               + GET categories
+                            + sync-to-wordpress        + GET tags
+                                                        + PUT /wp/v2/posts/{id}
+
+"Review feedback"     ────▶  view-editorial-     ────▶  GET /wp/v2/comments
+                            feedback                    + Filter by post_author
+                                                        + Parse editorial notes
+```
+
+### Key Architectural Components
+
+1. **Document Session Manager**
+   - Maintains editing sessions with opaque handles
+   - No filesystem paths exposed to AI
+   - Automatic cleanup on sync
+
+2. **Format Conversion Layer**
+   - Turndown: HTML → Markdown (with fallbacks)
+   - Marked: Markdown → HTML (with fallbacks)
+   - Handles WordPress HTML entities transparently
+
+3. **Semantic Operation Engine**
+   - Maps high-level intents to WordPress workflows
+   - Batches related API calls
+   - Provides transaction-like operations
+
+4. **Line-Based Edit System**
+   - Precise line number operations
+   - Context-aware search within line ranges
+   - Avoids brittle string matching
 
 ## Personality Mappings
 
@@ -205,11 +320,17 @@ The tool mappings are defined in `config/personalities.json`:
 - `submit-for-review` - Submit drafts for editorial review
 - `view-editorial-feedback` - See editor comments
 
-**Temp File Workflow:**
-- `pull-for-editing` - Fetch posts to local temp files
-- `read-document` - Read temp files with line numbers
-- `edit-document` - Edit temp files with string replacement
-- `sync-to-wordpress` - Push temp file changes back
+**Document Session Workflow:**
+- `pull-for-editing` - Fetch posts into editing sessions
+- `read-document` - Read documents with line numbers
+- `edit-document-line` - Replace specific lines by number
+- `insert-at-line` - Insert content at line positions
+- `replace-lines` - Replace line ranges
+- `search-replace` - Context-aware search and replace
+- `edit-document` - String replacement (fallback)
+- `sync-to-wordpress` - Push all changes back
+- `list-editing-sessions` - View active sessions
+- `close-editing-session` - Manual session cleanup
 
 ### Author
 

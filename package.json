@@ -33,7 +33,9 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@wordpress/api-fetch": "^7.24.0",
     "dotenv": "^16.5.0",
+    "marked": "^15.0.12",
     "node-fetch": "^3.3.2",
+    "turndown": "^7.2.0",
     "zod": "^3.25.48"
   },
   "devDependencies": {

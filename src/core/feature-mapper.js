@@ -6,15 +6,13 @@
  * as a separate tool.
  */
 
-import { writeFile, readFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { homedir } from 'os';
-import { existsSync } from 'fs';
+import { DocumentSessionManager } from './document-session-manager.js';
 
 export class FeatureMapper {
   constructor(wpClient) {
     this.wpClient = wpClient;
     this.featureMap = new Map();
+    this.sessionManager = new DocumentSessionManager();
   }
 
   async initialize() {
@@ -133,10 +131,10 @@ export class FeatureMapper {
       }
     });
 
-    // Pull for Editing - fetch post into temp file for local editing
+    // Pull for Editing - fetch post into editing session (filesystem abstracted)
     this.featureMap.set('pull-for-editing', {
       name: 'Pull for Editing',
-      description: 'Fetch a WordPress post into a local temp file for editing',
+      description: 'Fetch a WordPress post into an editing session',
       inputSchema: {
         type: 'object',
         properties: {
@@ -149,57 +147,196 @@ export class FeatureMapper {
       }
     });
 
-    // Sync to WordPress - push temp file changes back to WordPress
+    // Sync to WordPress - push editing session changes back to WordPress
     this.featureMap.set('sync-to-wordpress', {
       name: 'Sync to WordPress',
-      description: 'Push local temp file changes back to WordPress',
+      description: 'Push editing session changes back to WordPress',
       inputSchema: {
         type: 'object',
         properties: {
-          filePath: { type: 'string', description: 'Path to the temp file to sync' },
-          cleanupFile: { type: 'boolean', description: 'Remove temp file after sync', default: false },
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          closeSession: { type: 'boolean', description: 'Close editing session after sync', default: true },
         },
-        required: ['filePath'],
+        required: ['documentHandle'],
       },
       execute: async (params) => {
         return this.syncToWordPress(params);
       }
     });
 
-    // Edit Document - edit temp files for the workflow
+    // Edit Document - edit document by handle using string replacement
     this.featureMap.set('edit-document', {
       name: 'Edit Document',
-      description: 'Edit a temp file by replacing exact string matches',
+      description: 'Edit a document by replacing exact string matches',
       inputSchema: {
         type: 'object',
         properties: {
-          filePath: { type: 'string', description: 'Path to the temp file to edit' },
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
           oldString: { type: 'string', description: 'Exact string to find and replace' },
           newString: { type: 'string', description: 'String to replace with' },
           expectedReplacements: { type: 'number', description: 'Expected number of replacements', default: 1 },
         },
-        required: ['filePath', 'oldString', 'newString'],
+        required: ['documentHandle', 'oldString', 'newString'],
       },
       execute: async (params) => {
-        return this.editDocument(params);
+        return this.sessionManager.editDocument(
+          params.documentHandle, 
+          params.oldString, 
+          params.newString, 
+          params.expectedReplacements
+        );
       }
     });
 
-    // Read Document - read temp file contents with line numbers
+    // Read Document - read document contents with line numbers
     this.featureMap.set('read-document', {
       name: 'Read Document',
-      description: 'Read a temp file with line numbers for editing',
+      description: 'Read a document with line numbers for editing',
       inputSchema: {
         type: 'object',
         properties: {
-          filePath: { type: 'string', description: 'Path to the temp file to read' },
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
           offset: { type: 'number', description: 'Starting line number', default: 1 },
           limit: { type: 'number', description: 'Number of lines to read', default: 50 },
         },
-        required: ['filePath'],
+        required: ['documentHandle'],
       },
       execute: async (params) => {
-        return this.readDocument(params);
+        return this.sessionManager.readDocument(
+          params.documentHandle, 
+          params.offset, 
+          params.limit
+        );
+      }
+    });
+
+    // Edit Document Line - line-based editing for better reliability
+    this.featureMap.set('edit-document-line', {
+      name: 'Edit Document Line',
+      description: 'Replace an entire line in the document by line number',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          lineNumber: { type: 'number', description: 'Line number to replace (1-based)' },
+          newLine: { type: 'string', description: 'New content for the line' },
+        },
+        required: ['documentHandle', 'lineNumber', 'newLine'],
+      },
+      execute: async (params) => {
+        return this.sessionManager.editDocumentLine(
+          params.documentHandle,
+          params.lineNumber,
+          params.newLine
+        );
+      }
+    });
+
+    // Insert at Line - add content at specific position
+    this.featureMap.set('insert-at-line', {
+      name: 'Insert at Line',
+      description: 'Insert content before a specific line number',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          lineNumber: { type: 'number', description: 'Line number to insert before (1-based)' },
+          content: { type: 'string', description: 'Content to insert' },
+        },
+        required: ['documentHandle', 'lineNumber', 'content'],
+      },
+      execute: async (params) => {
+        return this.sessionManager.insertAtLine(
+          params.documentHandle,
+          params.lineNumber,
+          params.content
+        );
+      }
+    });
+
+    // Replace Lines - replace a range of lines
+    this.featureMap.set('replace-lines', {
+      name: 'Replace Lines',
+      description: 'Replace a range of lines with new content',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          startLine: { type: 'number', description: 'First line to replace (1-based)' },
+          endLine: { type: 'number', description: 'Last line to replace (inclusive)' },
+          newContent: { type: 'string', description: 'New content to replace the lines with' },
+        },
+        required: ['documentHandle', 'startLine', 'endLine', 'newContent'],
+      },
+      execute: async (params) => {
+        return this.sessionManager.replaceLines(
+          params.documentHandle,
+          params.startLine,
+          params.endLine,
+          params.newContent
+        );
+      }
+    });
+
+    // Search Replace - flexible search and replace with context
+    this.featureMap.set('search-replace', {
+      name: 'Search Replace',
+      description: 'Search and replace text with optional line context',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          searchTerm: { type: 'string', description: 'Text to search for' },
+          replacement: { type: 'string', description: 'Text to replace with' },
+          nearLine: { type: 'number', description: 'Optional: only search within 5 lines of this line number' },
+          maxReplacements: { type: 'number', description: 'Maximum replacements to make', default: 1 },
+        },
+        required: ['documentHandle', 'searchTerm', 'replacement'],
+      },
+      execute: async (params) => {
+        return this.sessionManager.searchReplace(
+          params.documentHandle,
+          params.searchTerm,
+          params.replacement,
+          {
+            nearLine: params.nearLine,
+            maxReplacements: params.maxReplacements
+          }
+        );
+      }
+    });
+
+    // List Active Sessions - show active editing sessions (for management)
+    this.featureMap.set('list-editing-sessions', {
+      name: 'List Editing Sessions',
+      description: 'List active editing sessions for management and cleanup',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+      execute: async (params) => {
+        const sessions = this.sessionManager.getActiveSessions();
+        return {
+          success: true,
+          sessions: sessions,
+          message: `Found ${sessions.length} active editing session(s)`,
+        };
+      }
+    });
+
+    // Close Editing Session - manually close an editing session
+    this.featureMap.set('close-editing-session', {
+      name: 'Close Editing Session',
+      description: 'Close an editing session and clean up resources',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle to close' },
+        },
+        required: ['documentHandle'],
+      },
+      execute: async (params) => {
+        return this.sessionManager.closeSession(params.documentHandle);
       }
     });
   }
@@ -719,32 +856,20 @@ export class FeatureMapper {
       // Fetch the post from WordPress
       const post = await this.wpClient.getPost(params.postId);
       
-      // Ensure Documents directory exists
-      const documentsDir = join(homedir(), 'Documents');
-      if (!existsSync(documentsDir)) {
-        await mkdir(documentsDir, { recursive: true });
-      }
-
-      // Create temp file name: wp-post-{id}-{timestamp}.md
-      const timestamp = Date.now();
-      const fileName = `wp-post-${params.postId}-${timestamp}.md`;
-      const filePath = join(documentsDir, fileName);
-
       // Format content with metadata header
       const content = this.formatPostForEditing(post);
       
-      // Write to temp file
-      await writeFile(filePath, content, 'utf8');
+      // Create editing session (filesystem abstracted)
+      const session = await this.sessionManager.createSession(
+        params.postId, 
+        content, 
+        {
+          title: post.title.rendered,
+          status: post.status
+        }
+      );
 
-      return {
-        success: true,
-        postId: params.postId,
-        filePath: filePath,
-        fileName: fileName,
-        title: post.title.rendered,
-        status: post.status,
-        message: `Post pulled for editing: ${fileName}`,
-      };
+      return session;
     } catch (error) {
       throw new Error(`Failed to pull post for editing: ${error.message}`);
     }
@@ -752,8 +877,8 @@ export class FeatureMapper {
 
   async syncToWordPress(params) {
     try {
-      // Read the temp file
-      const content = await readFile(params.filePath, 'utf8');
+      // Get document content using session manager (filesystem abstracted)
+      const content = await this.sessionManager.getDocumentContent(params.documentHandle);
       
       // Parse the content to extract metadata and post content
       const { postId, metadata, postContent } = this.parseEditedFile(content);
@@ -772,9 +897,9 @@ export class FeatureMapper {
       // Update the post
       const updatedPost = await this.wpClient.updatePost(postId, updateData);
 
-      // Clean up temp file if requested
-      if (params.cleanupFile) {
-        await import('fs/promises').then(fs => fs.unlink(params.filePath));
+      // Close session if requested (default: true)
+      if (params.closeSession !== false) {
+        await this.sessionManager.closeSession(params.documentHandle);
       }
 
       return {
@@ -782,8 +907,8 @@ export class FeatureMapper {
         postId: postId,
         title: updatedPost.title.rendered,
         status: updatedPost.status,
-        filePath: params.filePath,
-        cleaned: params.cleanupFile || false,
+        documentHandle: params.documentHandle,
+        sessionClosed: params.closeSession !== false,
         message: `Post synced to WordPress successfully`,
       };
     } catch (error) {
@@ -796,9 +921,15 @@ export class FeatureMapper {
     const categories = post._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [];
     const tags = post._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || [];
 
-    return `# ${post.title.rendered}
+    // Convert WordPress HTML to clean markdown for AI editing
+    // "It's the thought that counts" - focus on content, not encoding
+    const cleanTitle = this.sessionManager.htmlToMarkdown(post.title.rendered);
+    const cleanContent = this.sessionManager.htmlToMarkdown(post.content.rendered);
+    const cleanExcerpt = this.sessionManager.htmlToMarkdown(post.excerpt.rendered);
 
-${post.content.rendered.replace(/<[^>]*>/g, '')}
+    return `# ${cleanTitle}
+
+${cleanContent}
 
 ---
 **Post Metadata:**
@@ -806,7 +937,7 @@ ${post.content.rendered.replace(/<[^>]*>/g, '')}
 - Status: ${post.status}
 - Categories: ${categories.join(', ')}
 - Tags: ${tags.join(', ')}
-- Excerpt: ${post.excerpt.rendered.replace(/<[^>]*>/g, '')}`;
+- Excerpt: ${cleanExcerpt}`;
   }
 
   parseEditedFile(content) {
@@ -836,9 +967,16 @@ ${post.content.rendered.replace(/<[^>]*>/g, '')}
       postContent.replace(/^# .+$\n\n?/m, '') : 
       postContent;
 
+    // Convert markdown back to HTML for WordPress
+    // "It's the thought that counts" - preserve meaning, handle encoding
+    const htmlContent = this.sessionManager.markdownToHtml(actualContent);
+
     // Parse optional metadata
     const metadata = {};
-    if (title) metadata.title = title;
+    if (title) {
+      // Convert title markdown to HTML if needed
+      metadata.title = this.sessionManager.markdownToHtml(title);
+    }
 
     const categoriesMatch = metadataSection.match(/- Categories: (.+)/);
     if (categoriesMatch && categoriesMatch[1].trim() !== '') {
@@ -852,88 +990,15 @@ ${post.content.rendered.replace(/<[^>]*>/g, '')}
 
     const excerptMatch = metadataSection.match(/- Excerpt: (.+)/);
     if (excerptMatch && excerptMatch[1].trim() !== '') {
-      metadata.excerpt = excerptMatch[1];
+      // Convert excerpt markdown to HTML if needed
+      metadata.excerpt = this.sessionManager.markdownToHtml(excerptMatch[1]);
     }
 
     return {
       postId,
       metadata,
-      postContent: actualContent,
+      postContent: htmlContent, // Now returns HTML, not raw markdown
     };
   }
 
-  async editDocument(params) {
-    try {
-      // Read the current file content
-      const content = await readFile(params.filePath, 'utf8');
-      
-      // Count occurrences of the old string
-      const occurrences = (content.match(new RegExp(params.oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-      
-      if (occurrences === 0) {
-        throw new Error(`String not found: "${params.oldString}"`);
-      }
-      
-      if (params.expectedReplacements && occurrences !== params.expectedReplacements) {
-        throw new Error(`Expected ${params.expectedReplacements} replacements, but found ${occurrences} occurrences`);
-      }
-      
-      // Perform the replacement
-      const newContent = content.replace(new RegExp(params.oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), params.newString);
-      
-      // Write the updated content back
-      await writeFile(params.filePath, newContent, 'utf8');
-      
-      // Get a snippet of the change for confirmation
-      const lines = newContent.split('\n');
-      const changeIndex = lines.findIndex(line => line.includes(params.newString));
-      const startLine = Math.max(0, changeIndex - 2);
-      const endLine = Math.min(lines.length, changeIndex + 3);
-      const snippet = lines.slice(startLine, endLine)
-        .map((line, i) => `${startLine + i + 1}: ${line}`)
-        .join('\n');
-      
-      return {
-        success: true,
-        filePath: params.filePath,
-        replacements: occurrences,
-        message: `Successfully replaced ${occurrences} occurrence(s)`,
-        snippet: snippet,
-      };
-    } catch (error) {
-      throw new Error(`Failed to edit document: ${error.message}`);
-    }
-  }
-
-  async readDocument(params) {
-    try {
-      // Read the file content
-      const content = await readFile(params.filePath, 'utf8');
-      const lines = content.split('\n');
-      
-      // Apply offset and limit
-      const startIndex = (params.offset || 1) - 1;
-      const limitCount = params.limit || 50;
-      const endIndex = Math.min(lines.length, startIndex + limitCount);
-      
-      // Format with line numbers (cat -n style)
-      const numberedLines = lines.slice(startIndex, endIndex)
-        .map((line, i) => {
-          const lineNum = startIndex + i + 1;
-          return `${lineNum.toString().padStart(6)}\t${line}`;
-        })
-        .join('\n');
-      
-      return {
-        success: true,
-        filePath: params.filePath,
-        totalLines: lines.length,
-        startLine: startIndex + 1,
-        endLine: endIndex,
-        content: numberedLines,
-      };
-    } catch (error) {
-      throw new Error(`Failed to read document: ${error.message}`);
-    }
-  }
 }
