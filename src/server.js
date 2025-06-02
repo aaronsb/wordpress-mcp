@@ -87,21 +87,17 @@ class WordPressAuthorMCP {
   setupHandlers() {
     // Register each tool with the McpServer
     this.tools.forEach((tool) => {
-      // Convert the inputSchema to Zod schema
-      const zodSchema = this.convertToZodSchema(tool.inputSchema);
-      
-      // Register the tool
-      this.server.tool(
-        tool.name,
-        zodSchema,
-        async (params) => {
-          return await tool.handler(params);
-        },
-        {
-          description: tool.description
-        }
-      );
+      // For now, use the simpler approach with manual schema override
+      this.server._registeredTools[tool.name] = {
+        description: tool.description,
+        inputSchema: this.convertToZodSchema(tool.inputSchema),
+        handler: async (params) => await tool.handler(params),
+        enabled: true
+      };
     });
+    
+    // Initialize tool handlers after all tools are registered
+    this.server.setToolRequestHandlers();
   }
 
   convertToZodSchema(inputSchema) {
