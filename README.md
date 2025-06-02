@@ -5,7 +5,8 @@ A personality-based Model Context Protocol (MCP) server for WordPress that provi
 ## Purpose & Features
 
 - **🎭 Personality-Based Tool Mapping**: Three modes (Contributor/Author/Administrator) with role-appropriate tools
-- **🔧 Semantic Operations**: High-level WordPress actions without API complexity
+- **🔧 Semantic Operations**: High-level WordPress actions without API complexity  
+- **📁 Temp File Workflow**: cups-mcp style local editing with pull-edit-sync pattern
 - **🛡️ WordPress-Native Permissions**: Let WordPress handle all permission enforcement
 - **📝 Content Management**: Create drafts, publish posts, schedule content, manage media
 - **⚡ Map-Based Architecture**: JSON configuration for tool assignments, no hardcoded roles
@@ -157,15 +158,40 @@ Once configured, the WordPress tools will be available in Claude. You can:
 
 - Create and edit draft posts
 - Publish articles with scheduling options
+- **Pull posts for local editing with temp files**
+- **Edit content locally using window/search/replace patterns**
+- **Sync changes back in single API call**
 - Manage media files
 - Perform bulk operations (admin only)
 - Search and filter all content (admin only)
 
-Example prompts:
+### Content Editing Workflows
+
+**Traditional Direct Editing:**
 - "Create a draft blog post about AI development"
 - "Publish my draft with ID 30"
 - "Schedule a post for next Monday at 9 AM"
-- "Show me all draft posts"
+
+**Temp File Workflow (Recommended for complex edits):**
+- "Pull post 42 for editing" → Creates local temp file
+- Use read-document and edit-document tools to iterate locally
+- "Sync the temp file back to WordPress" → Single update
+
+### Example Temp File Workflow
+
+```
+1. Pull for editing: pull-for-editing postId=42
+   → Creates ~/Documents/wp-post-42-timestamp.md
+
+2. Read and edit locally:
+   → read-document filePath=~/Documents/wp-post-42-timestamp.md
+   → edit-document oldString="..." newString="..." 
+   → Multiple local iterations without API calls
+
+3. Sync back:
+   → sync-to-wordpress filePath=~/Documents/wp-post-42-timestamp.md
+   → Single WordPress update with all changes
+```
 
 ## Personality Mappings
 
@@ -173,29 +199,37 @@ The tool mappings are defined in `config/personalities.json`:
 
 ### Contributor
 
+**Content Creation:**
 - `draft-article` - Create draft posts
 - `edit-draft` - Edit existing drafts
 - `submit-for-review` - Submit drafts for editorial review
 - `view-editorial-feedback` - See editor comments
-- `suggest-metadata` - Propose categories and tags
+
+**Temp File Workflow:**
+- `pull-for-editing` - Fetch posts to local temp files
+- `read-document` - Read temp files with line numbers
+- `edit-document` - Edit temp files with string replacement
+- `sync-to-wordpress` - Push temp file changes back
 
 ### Author
 
 - All contributor tools, plus:
-- `create-article` - Create and publish posts
+
+**Publishing:**
+- `create-article` - Create and publish posts immediately
 - `publish-workflow` - Publish or schedule posts
 - `manage-media` - Upload and manage media files
-- `schedule-content` - Schedule future posts
-- `manage-own-content` - Manage your own posts
 
 ### Administrator
 
 - All author tools, plus:
+
+**Site Management:**
 - `bulk-content-operations` - Bulk actions on posts
 - `manage-all-content` - View and manage all posts
-- `site-configuration` - Manage site settings
-- `user-management` - Manage users
-- `plugin-management` - Manage plugins
+- `review-content` - Review pending posts and comments
+- `moderate-comments` - Approve, reject, or manage comments
+- `manage-categories` - Create, update, and organize categories
 
 ## Adding Custom Personalities
 

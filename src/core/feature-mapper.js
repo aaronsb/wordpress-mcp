@@ -6,6 +6,11 @@
  * as a separate tool.
  */
 
+import { writeFile, readFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { homedir } from 'os';
+import { existsSync } from 'fs';
+
 export class FeatureMapper {
   constructor(wpClient) {
     this.wpClient = wpClient;
@@ -125,6 +130,76 @@ export class FeatureMapper {
       },
       execute: async (params) => {
         return this.editDraft(params);
+      }
+    });
+
+    // Pull for Editing - fetch post into temp file for local editing
+    this.featureMap.set('pull-for-editing', {
+      name: 'Pull for Editing',
+      description: 'Fetch a WordPress post into a local temp file for editing',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: { type: 'number', description: 'ID of the post to pull for editing' },
+        },
+        required: ['postId'],
+      },
+      execute: async (params) => {
+        return this.pullForEditing(params);
+      }
+    });
+
+    // Sync to WordPress - push temp file changes back to WordPress
+    this.featureMap.set('sync-to-wordpress', {
+      name: 'Sync to WordPress',
+      description: 'Push local temp file changes back to WordPress',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'Path to the temp file to sync' },
+          cleanupFile: { type: 'boolean', description: 'Remove temp file after sync', default: false },
+        },
+        required: ['filePath'],
+      },
+      execute: async (params) => {
+        return this.syncToWordPress(params);
+      }
+    });
+
+    // Edit Document - edit temp files for the workflow
+    this.featureMap.set('edit-document', {
+      name: 'Edit Document',
+      description: 'Edit a temp file by replacing exact string matches',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'Path to the temp file to edit' },
+          oldString: { type: 'string', description: 'Exact string to find and replace' },
+          newString: { type: 'string', description: 'String to replace with' },
+          expectedReplacements: { type: 'number', description: 'Expected number of replacements', default: 1 },
+        },
+        required: ['filePath', 'oldString', 'newString'],
+      },
+      execute: async (params) => {
+        return this.editDocument(params);
+      }
+    });
+
+    // Read Document - read temp file contents with line numbers
+    this.featureMap.set('read-document', {
+      name: 'Read Document',
+      description: 'Read a temp file with line numbers for editing',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'Path to the temp file to read' },
+          offset: { type: 'number', description: 'Starting line number', default: 1 },
+          limit: { type: 'number', description: 'Number of lines to read', default: 50 },
+        },
+        required: ['filePath'],
+      },
+      execute: async (params) => {
+        return this.readDocument(params);
       }
     });
   }
@@ -634,6 +709,231 @@ export class FeatureMapper {
       }
     } catch (error) {
       throw new Error(`Failed to manage categories: ${error.message}`);
+    }
+  }
+
+  // Temp file workflow methods
+
+  async pullForEditing(params) {
+    try {
+      // Fetch the post from WordPress
+      const post = await this.wpClient.getPost(params.postId);
+      
+      // Ensure Documents directory exists
+      const documentsDir = join(homedir(), 'Documents');
+      if (!existsSync(documentsDir)) {
+        await mkdir(documentsDir, { recursive: true });
+      }
+
+      // Create temp file name: wp-post-{id}-{timestamp}.md
+      const timestamp = Date.now();
+      const fileName = `wp-post-${params.postId}-${timestamp}.md`;
+      const filePath = join(documentsDir, fileName);
+
+      // Format content with metadata header
+      const content = this.formatPostForEditing(post);
+      
+      // Write to temp file
+      await writeFile(filePath, content, 'utf8');
+
+      return {
+        success: true,
+        postId: params.postId,
+        filePath: filePath,
+        fileName: fileName,
+        title: post.title.rendered,
+        status: post.status,
+        message: `Post pulled for editing: ${fileName}`,
+      };
+    } catch (error) {
+      throw new Error(`Failed to pull post for editing: ${error.message}`);
+    }
+  }
+
+  async syncToWordPress(params) {
+    try {
+      // Read the temp file
+      const content = await readFile(params.filePath, 'utf8');
+      
+      // Parse the content to extract metadata and post content
+      const { postId, metadata, postContent } = this.parseEditedFile(content);
+
+      // Prepare update data
+      const updateData = {
+        content: { raw: postContent },
+      };
+
+      // Add metadata if present
+      if (metadata.title) updateData.title = { raw: metadata.title };
+      if (metadata.excerpt) updateData.excerpt = { raw: metadata.excerpt };
+      if (metadata.categories) updateData.categories = await this.resolveCategories(metadata.categories);
+      if (metadata.tags) updateData.tags = await this.resolveTags(metadata.tags);
+
+      // Update the post
+      const updatedPost = await this.wpClient.updatePost(postId, updateData);
+
+      // Clean up temp file if requested
+      if (params.cleanupFile) {
+        await import('fs/promises').then(fs => fs.unlink(params.filePath));
+      }
+
+      return {
+        success: true,
+        postId: postId,
+        title: updatedPost.title.rendered,
+        status: updatedPost.status,
+        filePath: params.filePath,
+        cleaned: params.cleanupFile || false,
+        message: `Post synced to WordPress successfully`,
+      };
+    } catch (error) {
+      throw new Error(`Failed to sync to WordPress: ${error.message}`);
+    }
+  }
+
+  formatPostForEditing(post) {
+    // Extract categories and tags
+    const categories = post._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [];
+    const tags = post._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || [];
+
+    return `# ${post.title.rendered}
+
+${post.content.rendered.replace(/<[^>]*>/g, '')}
+
+---
+**Post Metadata:**
+- Post ID: ${post.id}
+- Status: ${post.status}
+- Categories: ${categories.join(', ')}
+- Tags: ${tags.join(', ')}
+- Excerpt: ${post.excerpt.rendered.replace(/<[^>]*>/g, '')}`;
+  }
+
+  parseEditedFile(content) {
+    // Split content at the metadata divider
+    const parts = content.split('---\n**Post Metadata:**');
+    
+    if (parts.length !== 2) {
+      throw new Error('Invalid temp file format - missing metadata section');
+    }
+
+    const postContent = parts[0].trim();
+    const metadataSection = parts[1];
+
+    // Extract post ID from metadata
+    const postIdMatch = metadataSection.match(/- Post ID: (\d+)/);
+    if (!postIdMatch) {
+      throw new Error('Could not find Post ID in temp file');
+    }
+    const postId = parseInt(postIdMatch[1]);
+
+    // Extract title (first line should be # Title)
+    const titleMatch = postContent.match(/^# (.+)$/m);
+    const title = titleMatch ? titleMatch[1] : null;
+
+    // Remove title from content if present
+    const actualContent = titleMatch ? 
+      postContent.replace(/^# .+$\n\n?/m, '') : 
+      postContent;
+
+    // Parse optional metadata
+    const metadata = {};
+    if (title) metadata.title = title;
+
+    const categoriesMatch = metadataSection.match(/- Categories: (.+)/);
+    if (categoriesMatch && categoriesMatch[1].trim() !== '') {
+      metadata.categories = categoriesMatch[1].split(', ').map(cat => cat.trim());
+    }
+
+    const tagsMatch = metadataSection.match(/- Tags: (.+)/);
+    if (tagsMatch && tagsMatch[1].trim() !== '') {
+      metadata.tags = tagsMatch[1].split(', ').map(tag => tag.trim());
+    }
+
+    const excerptMatch = metadataSection.match(/- Excerpt: (.+)/);
+    if (excerptMatch && excerptMatch[1].trim() !== '') {
+      metadata.excerpt = excerptMatch[1];
+    }
+
+    return {
+      postId,
+      metadata,
+      postContent: actualContent,
+    };
+  }
+
+  async editDocument(params) {
+    try {
+      // Read the current file content
+      const content = await readFile(params.filePath, 'utf8');
+      
+      // Count occurrences of the old string
+      const occurrences = (content.match(new RegExp(params.oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      
+      if (occurrences === 0) {
+        throw new Error(`String not found: "${params.oldString}"`);
+      }
+      
+      if (params.expectedReplacements && occurrences !== params.expectedReplacements) {
+        throw new Error(`Expected ${params.expectedReplacements} replacements, but found ${occurrences} occurrences`);
+      }
+      
+      // Perform the replacement
+      const newContent = content.replace(new RegExp(params.oldString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), params.newString);
+      
+      // Write the updated content back
+      await writeFile(params.filePath, newContent, 'utf8');
+      
+      // Get a snippet of the change for confirmation
+      const lines = newContent.split('\n');
+      const changeIndex = lines.findIndex(line => line.includes(params.newString));
+      const startLine = Math.max(0, changeIndex - 2);
+      const endLine = Math.min(lines.length, changeIndex + 3);
+      const snippet = lines.slice(startLine, endLine)
+        .map((line, i) => `${startLine + i + 1}: ${line}`)
+        .join('\n');
+      
+      return {
+        success: true,
+        filePath: params.filePath,
+        replacements: occurrences,
+        message: `Successfully replaced ${occurrences} occurrence(s)`,
+        snippet: snippet,
+      };
+    } catch (error) {
+      throw new Error(`Failed to edit document: ${error.message}`);
+    }
+  }
+
+  async readDocument(params) {
+    try {
+      // Read the file content
+      const content = await readFile(params.filePath, 'utf8');
+      const lines = content.split('\n');
+      
+      // Apply offset and limit
+      const startIndex = (params.offset || 1) - 1;
+      const limitCount = params.limit || 50;
+      const endIndex = Math.min(lines.length, startIndex + limitCount);
+      
+      // Format with line numbers (cat -n style)
+      const numberedLines = lines.slice(startIndex, endIndex)
+        .map((line, i) => {
+          const lineNum = startIndex + i + 1;
+          return `${lineNum.toString().padStart(6)}\t${line}`;
+        })
+        .join('\n');
+      
+      return {
+        success: true,
+        filePath: params.filePath,
+        totalLines: lines.length,
+        startLine: startIndex + 1,
+        endLine: endIndex,
+        content: numberedLines,
+      };
+    } catch (error) {
+      throw new Error(`Failed to read document: ${error.message}`);
     }
   }
 }
