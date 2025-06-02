@@ -135,12 +135,7 @@ MCP_PERSONALITY=${defaultPersonality}
           args: [
             serverPath,
             `--personality=${defaultPersonality}`
-          ],
-          env: {
-            WORDPRESS_URL: wpUrl.replace(/\/$/, ''),
-            WORDPRESS_USERNAME: wpUsername,
-            WORDPRESS_APP_PASSWORD: wpAppPassword
-          }
+          ]
         }
       }
     };
@@ -148,19 +143,17 @@ MCP_PERSONALITY=${defaultPersonality}
     console.log('```json');
     console.log(JSON.stringify(claudeDesktopConfig, null, 2));
     console.log('```');
+    console.log('\nNote: The server will read credentials from the .env file in:');
+    console.log(`      ${__dirname}`);
 
     // Show Claude Code configuration
     console.log('\n💻 Claude Code Configuration\n');
     console.log('Option 1: Use the CLI command (recommended):\n');
     
-    const escapedPassword = wpAppPassword.replace(/"/g, '\\"');
     console.log('```bash');
     console.log(`claude mcp add wordpress-author \\`);
     console.log(`  node ${serverPath} \\`);
-    console.log(`  --personality=${defaultPersonality} \\`);
-    console.log(`  -e WORDPRESS_URL=${wpUrl.replace(/\/$/, '')} \\`);
-    console.log(`  -e WORDPRESS_USERNAME=${wpUsername} \\`);
-    console.log(`  -e "WORDPRESS_APP_PASSWORD=${escapedPassword}"`);
+    console.log(`  --personality=${defaultPersonality}`);
     console.log('```');
     
     console.log('\nOption 2: Manually add to your project\'s .claude/settings.json:\n');
@@ -172,12 +165,7 @@ MCP_PERSONALITY=${defaultPersonality}
           args: [
             serverPath,
             `--personality=${defaultPersonality}`
-          ],
-          env: {
-            WORDPRESS_URL: wpUrl.replace(/\/$/, ''),
-            WORDPRESS_USERNAME: wpUsername,
-            WORDPRESS_APP_PASSWORD: wpAppPassword
-          }
+          ]
         }
       }
     };
@@ -185,6 +173,9 @@ MCP_PERSONALITY=${defaultPersonality}
     console.log('```json');
     console.log(JSON.stringify(claudeCodeConfig, null, 2));
     console.log('```');
+    
+    console.log('\nNote: The server will read credentials from the .env file in:');
+    console.log(`      ${__dirname}`);
 
     // Final instructions
     console.log('\n🎉 Setup Complete!\n');

@@ -51,7 +51,7 @@ npm install
 
 ### 1. WordPress Setup
 
-Create a `.env` file with your WordPress credentials:
+Create a `.env` file in the wordpress-mcp directory with your WordPress credentials:
 
 ```env
 WORDPRESS_URL=https://your-site.com
@@ -62,7 +62,11 @@ WORDPRESS_APP_PASSWORD=your-app-password
 **Note**: Use Application Passwords for better security. Generate one at:
 `Users > Your Profile > Application Passwords` in your WordPress admin.
 
+**Alternative**: You can also set these as environment variables instead of using a `.env` file.
+
 ### 2. Claude Desktop Setup
+
+First, ensure your `.env` file is configured in the wordpress-mcp directory (run `npm run setup` if needed).
 
 Add to your Claude Desktop configuration file:
 
@@ -77,33 +81,29 @@ Add to your Claude Desktop configuration file:
       "args": [
         "/path/to/wordpress-mcp/src/server.js",
         "--personality=author"
-      ],
-      "env": {
-        "WORDPRESS_URL": "https://your-site.com",
-        "WORDPRESS_USERNAME": "your-username",
-        "WORDPRESS_APP_PASSWORD": "your-app-password"
-      }
+      ]
     }
   }
 }
 ```
 
+The server will read credentials from its `.env` file.
+
 ### 3. Claude Code Setup
 
 #### Option A: Using the CLI (Recommended)
 
-In your project directory, run:
+First, ensure your `.env` file is configured (run `npm run setup` if needed).
+
+Then, in your project directory, run:
 
 ```bash
 claude mcp add wordpress-author \
   node /path/to/wordpress-mcp/src/server.js \
-  --personality=author \
-  -e WORDPRESS_URL=https://your-site.com \
-  -e WORDPRESS_USERNAME=your-username \
-  -e "WORDPRESS_APP_PASSWORD=your-app-password"
+  --personality=author
 ```
 
-This will automatically add the configuration to your project.
+The server will read credentials from the `.env` file in the wordpress-mcp directory.
 
 #### Option B: Manual Configuration
 
@@ -117,16 +117,13 @@ Alternatively, add to your project's `.claude/settings.json`:
       "args": [
         "/path/to/wordpress-mcp/src/server.js",
         "--personality=author"
-      ],
-      "env": {
-        "WORDPRESS_URL": "https://your-site.com",
-        "WORDPRESS_USERNAME": "your-username",
-        "WORDPRESS_APP_PASSWORD": "your-app-password"
-      }
+      ]
     }
   }
 }
 ```
+
+Note: The server reads credentials from its `.env` file, not from the Claude configuration.
 
 **Note**: Adjust the personality parameter (`--personality=`) to one of:
 - `contributor` - Limited tools for content creation
