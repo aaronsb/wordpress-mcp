@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
+import { z } from 'zod';
 import { PersonalityManager } from './core/personality-manager.js';
 import { FeatureRegistry } from './core/feature-registry.js';
 import { WordPressClient } from './core/wordpress-client.js';
@@ -17,18 +18,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 class WordPressAuthorMCP {
   constructor() {
-    this.server = new Server(
-      {
-        name: 'wordpress-author-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-          resources: {},
-        },
-      }
-    );
+    this.server = new McpServer({
+      name: 'wordpress-author-mcp',
+      version: '1.0.0',
+    });
 
     this.setupErrorHandling();
   }
@@ -63,9 +56,6 @@ class WordPressAuthorMCP {
     // Inject tools for the selected personality
     this.tools = this.toolInjector.getToolsForPersonality(personalityName);
     console.error(`Loaded ${this.tools.length} tools for ${personalityName} personality`);
-
-    // Setup server handlers
-    this.setupHandlers();
   }
 
   getPersonality() {
@@ -86,40 +76,51 @@ class WordPressAuthorMCP {
   }
 
   setupHandlers() {
-    // Handle all tool operations
-    this.server.setRequestHandler(async (request) => {
-      switch (request.method) {
-        case 'tools/list':
-          return {
-            tools: this.tools.map((tool) => ({
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.inputSchema,
-            })),
-          };
-
-        case 'tools/call':
-          const { name, arguments: args } = request.params;
-          const tool = this.tools.find((t) => t.name === name);
-
-          if (!tool) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Tool '${name}' is not available for this personality`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          return await tool.handler(args || {});
-
-        default:
-          throw new Error(`Unknown method: ${request.method}`);
-      }
+    // Register each tool with the McpServer
+    this.tools.forEach((tool) => {
+      // Convert the inputSchema to Zod schema
+      const zodSchema = this.convertToZodSchema(tool.inputSchema);
+      
+      // Register the tool
+      this.server.tool(
+        tool.name,
+        zodSchema,
+        async (params) => {
+          return await tool.handler(params);
+        },
+        {
+          description: tool.description
+        }
+      );
     });
+  }
+
+  convertToZodSchema(inputSchema) {
+    if (!inputSchema || !inputSchema.properties) {
+      return z.object({});
+    }
+
+    const shape = {};
+    for (const [key, value] of Object.entries(inputSchema.properties)) {
+      if (value.type === 'string') {
+        shape[key] = value.enum ? z.enum(value.enum) : z.string();
+      } else if (value.type === 'number') {
+        shape[key] = z.number();
+      } else if (value.type === 'boolean') {
+        shape[key] = z.boolean();
+      } else if (value.type === 'array') {
+        shape[key] = z.array(z.any());
+      } else {
+        shape[key] = z.any();
+      }
+
+      // Handle optional fields
+      if (!inputSchema.required || !inputSchema.required.includes(key)) {
+        shape[key] = shape[key].optional();
+      }
+    }
+
+    return z.object(shape);
   }
 
   setupErrorHandling() {
@@ -135,6 +136,10 @@ class WordPressAuthorMCP {
   async run() {
     const transport = new StdioServerTransport();
     await this.initialize();
+    
+    // Setup handlers before connecting transport
+    this.setupHandlers();
+    
     await this.server.connect(transport);
     console.error('WordPress Author MCP server running');
   }

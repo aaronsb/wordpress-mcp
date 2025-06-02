@@ -99,7 +99,7 @@ Then, in your project directory, run:
 
 ```bash
 claude mcp add wordpress-author \
-  node /path/to/wordpress-mcp/src/server.js \
+  node /path/to/wordpress-mcp/src/server.js -- \
   --personality=author
 ```
 

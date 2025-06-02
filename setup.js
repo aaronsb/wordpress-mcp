@@ -166,7 +166,7 @@ MCP_PERSONALITY=${defaultPersonality}
     
     console.log('```bash');
     console.log(`claude mcp add wordpress-author \\`);
-    console.log(`  node ${serverPath} \\`);
+    console.log(`  node ${serverPath} -- \\`);
     console.log(`  --personality=${defaultPersonality}`);
     console.log('```');
     
