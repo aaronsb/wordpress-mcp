@@ -25,9 +25,9 @@ export class PersonalityManager {
           context: {
             can_publish: false,
             can_upload_media: false,
-            default_post_status: 'draft'
-          }
-        }
+            default_post_status: 'draft',
+          },
+        },
       };
     }
   }
@@ -43,7 +43,7 @@ export class PersonalityManager {
   // Validate that all features in a personality exist
   validatePersonality(personality, featureRegistry) {
     const missingFeatures = personality.features.filter(
-      feature => !featureRegistry.hasFeature(feature)
+      (feature) => !featureRegistry.hasFeature(feature)
     );
 
     if (missingFeatures.length > 0) {
@@ -55,7 +55,7 @@ export class PersonalityManager {
 
   // Get features available to a personality with context filtering
   getContextualFeatures(personality, context = {}) {
-    return personality.features.filter(featureName => {
+    return personality.features.filter((featureName) => {
       // Additional runtime filtering based on context
       // For example, even an author might not be able to publish
       // if their account has been restricted

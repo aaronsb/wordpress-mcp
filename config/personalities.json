@@ -2,12 +2,7 @@
   "contributor": {
     "name": "Contributor",
     "description": "Draft content for editorial review - focused on content creation without publishing rights",
-    "features": [
-      "draft-article",
-      "edit-draft",
-      "submit-for-review",
-      "view-editorial-feedback"
-    ],
+    "features": ["draft-article", "edit-draft", "submit-for-review", "view-editorial-feedback"],
     "context": {
       "can_publish": false,
       "can_upload_media": false,
@@ -16,7 +11,7 @@
       "default_post_status": "draft"
     }
   },
-  
+
   "author": {
     "name": "Author",
     "description": "Create and publish own content with full media capabilities",
@@ -38,7 +33,7 @@
       "publish_capability": "own_only"
     }
   },
-  
+
   "administrator": {
     "name": "Administrator",
     "description": "Full site and content management with advanced capabilities",

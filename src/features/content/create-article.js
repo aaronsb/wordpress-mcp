@@ -1,59 +1,59 @@
 /**
  * Create Article Feature
- * 
+ *
  * Creates an article with publishing options - for authors and administrators
  */
 
 export default {
   name: 'create-article',
   description: 'Create an article with options to publish immediately or schedule',
-  
+
   inputSchema: {
     type: 'object',
     properties: {
       title: {
         type: 'string',
-        description: 'Article title'
+        description: 'Article title',
       },
       content: {
         type: 'string',
-        description: 'Article content (HTML or plain text)'
+        description: 'Article content (HTML or plain text)',
       },
       status: {
         type: 'string',
         enum: ['draft', 'publish', 'future', 'private'],
         default: 'draft',
-        description: 'Publication status'
+        description: 'Publication status',
       },
       schedule_date: {
         type: 'string',
-        description: 'ISO 8601 date for future publishing (required if status is "future")'
+        description: 'ISO 8601 date for future publishing (required if status is "future")',
       },
       excerpt: {
         type: 'string',
-        description: 'Article summary'
+        description: 'Article summary',
       },
       featured_media: {
         type: 'number',
-        description: 'Featured image ID'
+        description: 'Featured image ID',
       },
       categories: {
         type: 'array',
         items: { type: 'number' },
-        description: 'Category IDs'
+        description: 'Category IDs',
       },
       tags: {
         type: 'array',
         items: { type: 'number' },
-        description: 'Tag IDs'
-      }
+        description: 'Tag IDs',
+      },
     },
-    required: ['title', 'content']
+    required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
-    
+
     // Prepare post data
     const postData = {
       title: params.title,
@@ -62,7 +62,7 @@ export default {
       excerpt: params.excerpt || '',
       featured_media: params.featured_media || 0,
       categories: params.categories || [],
-      tags: params.tags || []
+      tags: params.tags || [],
     };
 
     // Handle scheduled posts
@@ -79,7 +79,7 @@ export default {
       title: post.title.rendered,
       status: post.status,
       link: post.link,
-      message: `Article ${post.status === 'publish' ? 'published' : post.status}: "${params.title}"`
+      message: `Article ${post.status === 'publish' ? 'published' : post.status}: "${params.title}"`,
     };
-  }
+  },
 };

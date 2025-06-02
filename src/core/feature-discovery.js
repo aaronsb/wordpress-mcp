@@ -1,6 +1,6 @@
 /**
  * Feature Discovery System
- * 
+ *
  * Discovers and maps WordPress features using the WordPress Feature API
  * This aligns with Automattic's approach of semantic feature abstraction
  */
@@ -19,14 +19,14 @@ export class FeatureDiscovery {
     try {
       // In a real implementation, this would query the WordPress Feature API
       // For now, we'll simulate the discovery based on Automattic's pattern
-      
+
       const features = await this.queryWordPressFeatures();
-      
+
       // Process and categorize features
       for (const feature of features) {
         this.processFeature(feature);
       }
-      
+
       return this.discoveredFeatures;
     } catch (error) {
       console.error('Feature discovery failed:', error);
@@ -42,7 +42,7 @@ export class FeatureDiscovery {
   async queryWordPressFeatures() {
     // This would make a request to WordPress Feature API endpoint
     // Example: /wp-json/wp-features/v1/features
-    
+
     // Simulated response based on Automattic's structure
     return [
       {
@@ -58,9 +58,9 @@ export class FeatureDiscovery {
             title: { type: 'string', required: true },
             content: { type: 'string', required: true },
             seo_focus_keyword: { type: 'string' },
-            meta_description: { type: 'string' }
-          }
-        }
+            meta_description: { type: 'string' },
+          },
+        },
       },
       {
         id: 'content/schedule-series',
@@ -73,9 +73,9 @@ export class FeatureDiscovery {
           input: {
             series_title: { type: 'string', required: true },
             posts: { type: 'array', items: { type: 'object' } },
-            schedule: { type: 'object' }
-          }
-        }
+            schedule: { type: 'object' },
+          },
+        },
       },
       {
         id: 'media/smart-gallery',
@@ -88,9 +88,9 @@ export class FeatureDiscovery {
           input: {
             images: { type: 'array', items: { type: 'string' } },
             layout: { type: 'string', enum: ['grid', 'carousel', 'masonry'] },
-            auto_caption: { type: 'boolean', default: true }
-          }
-        }
+            auto_caption: { type: 'boolean', default: true },
+          },
+        },
       },
       {
         id: 'analytics/content-insights',
@@ -103,10 +103,10 @@ export class FeatureDiscovery {
           output: {
             top_posts: { type: 'array' },
             engagement_trends: { type: 'object' },
-            recommendations: { type: 'array' }
-          }
-        }
-      }
+            recommendations: { type: 'array' },
+          },
+        },
+      },
     ];
   }
 
@@ -120,17 +120,17 @@ export class FeatureDiscovery {
       description: feature.description,
       category: feature.category,
       type: feature.type,
-      
+
       // Map eligibility to our personality system
       personalities: this.mapEligibilityToPersonalities(feature.is_eligible),
-      
+
       // Convert WordPress schema to our format
       inputSchema: this.convertSchema(feature.schema?.input),
-      
+
       // Create semantic execution wrapper
       async execute(params, context) {
         return this.executeSemanticFeature(feature, params, context);
-      }
+      },
     };
 
     this.discoveredFeatures.set(feature.id, semanticFeature);
@@ -141,13 +141,13 @@ export class FeatureDiscovery {
    */
   mapEligibilityToPersonalities(eligibility) {
     if (!eligibility) return ['contributor', 'author', 'administrator'];
-    
+
     const capabilityMap = {
-      'can_publish_posts': ['author', 'administrator'],
-      'edit_others_posts': ['administrator'],
-      'manage_options': ['administrator'],
-      'upload_files': ['author', 'administrator'],
-      'edit_posts': ['contributor', 'author', 'administrator']
+      can_publish_posts: ['author', 'administrator'],
+      edit_others_posts: ['administrator'],
+      manage_options: ['administrator'],
+      upload_files: ['author', 'administrator'],
+      edit_posts: ['contributor', 'author', 'administrator'],
     };
 
     return capabilityMap[eligibility] || ['administrator'];
@@ -161,7 +161,7 @@ export class FeatureDiscovery {
       return {
         type: 'object',
         properties: {},
-        additionalProperties: true
+        additionalProperties: true,
       };
     }
 
@@ -172,17 +172,17 @@ export class FeatureDiscovery {
     for (const [key, value] of Object.entries(wpSchema)) {
       properties[key] = {
         type: value.type,
-        description: value.description || `${key} parameter`
+        description: value.description || `${key} parameter`,
       };
-      
+
       if (value.required) {
         required.push(key);
       }
-      
+
       if (value.enum) {
         properties[key].enum = value.enum;
       }
-      
+
       if (value.default !== undefined) {
         properties[key].default = value.default;
       }
@@ -191,7 +191,7 @@ export class FeatureDiscovery {
     return {
       type: 'object',
       properties,
-      required: required.length > 0 ? required : undefined
+      required: required.length > 0 ? required : undefined,
     };
   }
 
@@ -205,13 +205,13 @@ export class FeatureDiscovery {
     switch (feature.type) {
       case 'tool':
         return this.executeToolFeature(feature, params, wpClient);
-      
+
       case 'resource':
         return this.executeResourceFeature(feature, params, wpClient);
-      
+
       case 'prompt':
         return this.executePromptFeature(feature, params, wpClient);
-      
+
       default:
         throw new Error(`Unknown feature type: ${feature.type}`);
     }
@@ -227,15 +227,19 @@ export class FeatureDiscovery {
       const post = await wpClient.createPost({
         title: params.title,
         content: params.content,
-        status: 'publish'
+        status: 'publish',
       });
 
       // Add SEO metadata (would use Yoast or similar)
       if (params.seo_focus_keyword || params.meta_description) {
-        await this.addSeoMetadata(post.id, {
-          focus_keyword: params.seo_focus_keyword,
-          meta_description: params.meta_description
-        }, wpClient);
+        await this.addSeoMetadata(
+          post.id,
+          {
+            focus_keyword: params.seo_focus_keyword,
+            meta_description: params.meta_description,
+          },
+          wpClient
+        );
       }
 
       return {
@@ -243,7 +247,7 @@ export class FeatureDiscovery {
         postId: post.id,
         url: post.link,
         seo_optimized: true,
-        message: `Published with SEO optimization: "${params.title}"`
+        message: `Published with SEO optimization: "${params.title}"`,
       };
     }
 
@@ -251,7 +255,7 @@ export class FeatureDiscovery {
     if (feature.rest_alias) {
       return wpClient.request(feature.rest_alias, {
         method: 'POST',
-        body: JSON.stringify(params)
+        body: JSON.stringify(params),
       });
     }
 
@@ -265,7 +269,7 @@ export class FeatureDiscovery {
     if (feature.rest_alias) {
       return wpClient.request(feature.rest_alias);
     }
-    
+
     throw new Error(`No resource handler for feature: ${feature.id}`);
   }
 
@@ -277,7 +281,7 @@ export class FeatureDiscovery {
     return {
       template: feature.template,
       variables: params,
-      instructions: feature.instructions
+      instructions: feature.instructions,
     };
   }
 
@@ -290,8 +294,8 @@ export class FeatureDiscovery {
     return wpClient.updatePost(postId, {
       meta: {
         _yoast_wpseo_focuskw: seoData.focus_keyword,
-        _yoast_wpseo_metadesc: seoData.meta_description
-      }
+        _yoast_wpseo_metadesc: seoData.meta_description,
+      },
     });
   }
 
@@ -301,18 +305,21 @@ export class FeatureDiscovery {
   getStaticFeatures() {
     // Return a basic set of features if discovery fails
     return new Map([
-      ['content/create-draft', {
-        name: 'content/create-draft',
-        title: 'Create Draft',
-        description: 'Create a draft post',
-        personalities: ['contributor', 'author', 'administrator'],
-        async execute(params, context) {
-          return context.wpClient.createPost({
-            ...params,
-            status: 'draft'
-          });
-        }
-      }]
+      [
+        'content/create-draft',
+        {
+          name: 'content/create-draft',
+          title: 'Create Draft',
+          description: 'Create a draft post',
+          personalities: ['contributor', 'author', 'administrator'],
+          async execute(params, context) {
+            return context.wpClient.createPost({
+              ...params,
+              status: 'draft',
+            });
+          },
+        },
+      ],
     ]);
   }
 }

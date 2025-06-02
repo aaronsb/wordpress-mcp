@@ -11,10 +11,13 @@ This report analyzes the top WordPress MCP server implementations, with a focus 
 ## 1. Introduction
 
 ### 1.1 Background
+
 The Model Context Protocol (MCP) enables AI agents to interact with external systems through standardized interfaces. As WordPress powers over 40% of the web, effective MCP implementations are crucial for AI-powered content management and development workflows.
 
 ### 1.2 The API Wrapper Problem
+
 Many MCP servers simply map REST API endpoints to MCP tools, creating several issues:
+
 - AI agents must understand WordPress internals
 - Complex workflows require multiple coordinated API calls
 - Error handling becomes the AI's responsibility
@@ -22,7 +25,9 @@ Many MCP servers simply map REST API endpoints to MCP tools, creating several is
 - Limited context awareness
 
 ### 1.3 Evaluation Criteria
+
 We evaluated servers based on:
+
 - **Abstraction Quality**: Higher-level operations vs. direct API mapping
 - **Context Awareness**: Intelligent feature selection and filtering
 - **Business Logic**: Built-in WordPress knowledge and workflows
@@ -42,6 +47,7 @@ We evaluated servers based on:
 5. **WordPress-to-MCP-Server (henjii)**
 
 ### 2.2 Market Overview
+
 - **Primary Use Cases**: Content management, site administration, development automation
 - **Target Users**: Digital agencies, developers, content teams
 - **Integration Points**: Claude Desktop, Cursor, custom AI agents
@@ -53,17 +59,21 @@ We evaluated servers based on:
 ### 3.1 Automattic WordPress MCP Plugin ✅ **Sophisticated Implementation**
 
 #### Architecture
+
 - **Three-Layer System**: Tools, Resources, and Prompts
 - **WordPress Feature API Integration**: Semantic feature registry
 - **Extensible Design**: Plugin ecosystem support
 
 #### Key Differentiators
+
 1. **Context-Aware Feature Selection**
+
    - `is_eligible` callbacks determine feature availability
    - Dynamic filtering based on user context
    - Intelligent feature matching algorithms
 
 2. **Semantic Operations**
+
    - Features understand their purpose, not just mechanics
    - Higher-level abstractions (e.g., "Publish with SEO" vs. "create_post")
    - Business logic embedded in features
@@ -74,6 +84,7 @@ We evaluated servers based on:
    - Schema-driven discovery
 
 #### Technical Implementation
+
 ```php
 wp_register_feature( 'my-plugin/example-feature', array(
     'name' => 'Example Feature',
@@ -87,7 +98,9 @@ wp_register_feature( 'my-plugin/example-feature', array(
 ### 3.2 Other Implementations ❌ **API Wrappers**
 
 #### Common Patterns
+
 Most other servers follow this pattern:
+
 ```javascript
 // Direct API mapping
 tools: {
@@ -100,16 +113,19 @@ tools: {
 #### Specific Findings
 
 **stefans71/wordpress-mcp-server**
+
 - Only provides: `create_post`, `get_posts`, `update_post`
 - Direct REST API pass-through
 - No abstraction or intelligence
 
 **server-wp-mcp (emzimmer)**
+
 - "Dynamic Endpoint Discovery" = automatic API wrapping
 - Multi-site support is useful but doesn't add intelligence
 - Still requires AI to understand WordPress
 
 **InstaWP/mcp-wp**
+
 - Basic CRUD operations for standard WordPress objects
 - Some organizational structure but minimal abstraction
 - Marketing emphasizes ease of use over sophistication
@@ -119,28 +135,32 @@ tools: {
 ## 4. Architectural Comparison
 
 ### 4.1 API Wrapper Architecture
+
 ```
 AI Agent → MCP Server → REST API → WordPress
          (thin layer)  (direct mapping)
 ```
+
 **Problems**: AI must orchestrate complex workflows, handle errors, understand WordPress concepts
 
 ### 4.2 Intelligent Abstraction Architecture (Automattic)
+
 ```
 AI Agent → Feature API → Context Engine → Smart Tools → WordPress
-         (semantic layer) (filtering)    (workflows)   
+         (semantic layer) (filtering)    (workflows)
 ```
+
 **Benefits**: AI works with high-level concepts, server handles complexity
 
 ### 4.3 Key Architectural Differences
 
-| Aspect | API Wrappers | Automattic Implementation |
-|--------|--------------|---------------------------|
-| **Abstraction Level** | Low (REST endpoints) | High (semantic features) |
-| **Context Awareness** | None | Dynamic filtering |
-| **Error Handling** | Pass-through | Intelligent recovery |
-| **Workflow Support** | Manual orchestration | Built-in patterns |
-| **Extensibility** | Limited | Full plugin ecosystem |
+| Aspect                | API Wrappers         | Automattic Implementation |
+| --------------------- | -------------------- | ------------------------- |
+| **Abstraction Level** | Low (REST endpoints) | High (semantic features)  |
+| **Context Awareness** | None                 | Dynamic filtering         |
+| **Error Handling**    | Pass-through         | Intelligent recovery      |
+| **Workflow Support**  | Manual orchestration | Built-in patterns         |
+| **Extensibility**     | Limited              | Full plugin ecosystem     |
 
 ---
 
@@ -149,6 +169,7 @@ AI Agent → Feature API → Context Engine → Smart Tools → WordPress
 ### 5.1 Content Publishing Workflow
 
 **API Wrapper Approach**:
+
 1. AI calls `create_post` with draft status
 2. AI calls `add_featured_image`
 3. AI calls `set_categories`
@@ -157,6 +178,7 @@ AI Agent → Feature API → Context Engine → Smart Tools → WordPress
 6. AI handles any errors at each step
 
 **Automattic Approach**:
+
 1. AI calls semantic feature: "Publish article with metadata"
 2. Server orchestrates all necessary steps
 3. Returns success or contextual error guidance
@@ -174,12 +196,14 @@ AI Agent → Feature API → Context Engine → Smart Tools → WordPress
 ### 6.1 For Organizations
 
 **Choose Automattic's Implementation if you need:**
+
 - Sophisticated AI workflows
 - Reduced AI token usage (less back-and-forth)
 - Third-party plugin integration
 - Future-proof architecture
 
 **Consider API Wrappers only for:**
+
 - Simple CRUD operations
 - Direct REST API access requirements
 - Minimal abstraction needs
@@ -187,12 +211,14 @@ AI Agent → Feature API → Context Engine → Smart Tools → WordPress
 ### 6.2 For Developers
 
 **Extending Automattic's System:**
+
 1. Register semantic features, not endpoints
 2. Implement `is_eligible` callbacks for context
 3. Use the Feature Query system
 4. Provide rich schemas for discovery
 
 **Best Practices:**
+
 ```php
 // Good: Semantic feature
 wp_register_feature('my-plugin/optimize-seo', array(
@@ -213,16 +239,19 @@ register_rest_route('my-plugin/v1', '/update-meta', array(
 ## 7. Future Considerations
 
 ### 7.1 Industry Trends
+
 - Increasing demand for AI-powered WordPress management
 - Movement toward semantic web technologies
 - Growing importance of context-aware systems
 
 ### 7.2 Automattic's Strategic Position
+
 - First-mover advantage in intelligent WordPress MCP
 - Potential to become the standard
 - Strong foundation for ecosystem growth
 
 ### 7.3 Gaps in Current Implementations
+
 - Limited workflow templates in most servers
 - Lack of learning/adaptation capabilities
 - Missing cross-site orchestration features
@@ -232,6 +261,7 @@ register_rest_route('my-plugin/v1', '/update-meta', array(
 ## 8. Conclusions
 
 ### 8.1 Key Findings
+
 1. **Only 1 of 5** major WordPress MCP servers avoids the API wrapper antipattern
 2. **Automattic's implementation** provides genuine intelligence through the WordPress Feature API
 3. **Most servers** require AI agents to understand WordPress internals
@@ -240,16 +270,19 @@ register_rest_route('my-plugin/v1', '/update-meta', array(
 ### 8.2 Recommendations
 
 **For WordPress Agencies:**
+
 - Adopt Automattic's WordPress MCP Plugin for production use
 - Invest in training for Feature API development
 - Build custom features for client-specific needs
 
 **For Plugin Developers:**
+
 - Integrate with the WordPress Feature API
 - Provide semantic features, not just REST endpoints
 - Consider MCP compatibility in plugin design
 
 **For the WordPress Community:**
+
 - Standardize on the Feature API approach
 - Contribute to the open-source implementations
 - Share workflow patterns and best practices
@@ -270,15 +303,15 @@ The future of WordPress development lies not in exposing more endpoints, but in 
 
 ## Appendix B: Evaluation Matrix
 
-| Server | Architecture Score | Intelligence | Extensibility | Production Ready | Overall Rating |
-|--------|-------------------|--------------|---------------|------------------|----------------|
-| Automattic | 9/10 | 9/10 | 10/10 | 8/10 | **9/10** |
-| MCP-WP | 6/10 | 5/10 | 7/10 | 6/10 | **6/10** |
-| server-wp-mcp | 5/10 | 3/10 | 5/10 | 7/10 | **5/10** |
-| InstaWP | 5/10 | 4/10 | 6/10 | 7/10 | **5.5/10** |
-| henjii | 4/10 | 3/10 | 4/10 | 5/10 | **4/10** |
+| Server        | Architecture Score | Intelligence | Extensibility | Production Ready | Overall Rating |
+| ------------- | ------------------ | ------------ | ------------- | ---------------- | -------------- |
+| Automattic    | 9/10               | 9/10         | 10/10         | 8/10             | **9/10**       |
+| MCP-WP        | 6/10               | 5/10         | 7/10          | 6/10             | **6/10**       |
+| server-wp-mcp | 5/10               | 3/10         | 5/10          | 7/10             | **5/10**       |
+| InstaWP       | 5/10               | 4/10         | 6/10          | 7/10             | **5.5/10**     |
+| henjii        | 4/10               | 3/10         | 4/10          | 5/10             | **4/10**       |
 
 ---
 
-*Report compiled: June 2025*  
-*Based on analysis of public repositories and documentation*
+_Report compiled: June 2025_  
+_Based on analysis of public repositories and documentation_

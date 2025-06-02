@@ -57,24 +57,28 @@ Just as ECU maps adjust fuel injection, timing, and boost pressure without chang
 ## Component Responsibilities
 
 ### 1. MCP Server (server.js)
+
 - Handles MCP protocol communication
 - Routes requests to appropriate handlers
 - Manages server lifecycle
 - Provides error handling
 
 ### 2. Personality Manager
+
 - Loads personality configurations
 - Filters features based on selected personality
 - Validates personality definitions
 - Provides contextual feature access
 
 ### 3. Feature Registry
+
 - Loads and manages semantic features
 - Provides feature discovery
 - Handles feature lifecycle
 - Validates feature schemas
 
 ### 4. WordPress Client
+
 - Abstracts WordPress REST API
 - Handles authentication
 - Manages API responses
@@ -88,15 +92,15 @@ Each feature is a self-contained module with:
 {
   name: 'feature-name',
   description: 'Human and AI readable description',
-  
+
   // Which personalities can see this tool
   personalities: ['author', 'administrator'],
-  
+
   // Input validation schema
   inputSchema: {
     // JSON Schema definition
   },
-  
+
   // Execution logic with embedded workflows
   async execute(params, context) {
     // Semantic operation implementation
@@ -108,6 +112,7 @@ Each feature is a self-contained module with:
 ## Personality System
 
 ### Configuration Structure
+
 ```json
 {
   "personality-name": {
@@ -124,6 +129,7 @@ Each feature is a self-contained module with:
 ```
 
 ### Personality Hierarchy
+
 1. **Contributor**: Basic content creation, no publishing
 2. **Author**: Own content management and publishing
 3. **Administrator**: Full site and content management
@@ -133,11 +139,13 @@ Each feature is a self-contained module with:
 ### Rule Categories
 
 1. **Content Scope**
+
    - `own_content_only`: Can only modify own posts
    - `all_content`: Can modify any content
    - `team_content`: Can modify team members' content
 
 2. **Action Scope**
+
    - `create_draft`: Can create draft posts
    - `publish_content`: Can publish posts
    - `delete_content`: Can delete posts
@@ -152,11 +160,7 @@ Each feature is a self-contained module with:
 
 ```javascript
 // Before execution
-const permitted = await scopeRuleEngine.check(
-  feature.scopeRules,
-  context.user,
-  params
-);
+const permitted = await scopeRuleEngine.check(feature.scopeRules, context.user, params);
 
 if (!permitted.allowed) {
   return gracefulError(permitted.reason);
@@ -166,21 +170,27 @@ if (!permitted.allowed) {
 ## Extension Points
 
 ### 1. Adding New Features
+
 Create a new file in `src/features/category/feature-name.js`:
 
 ```javascript
 export default {
   name: 'my-feature',
   description: 'What this feature does',
-  eligibility: { /* ... */ },
-  scopeRules: [ /* ... */ ],
+  eligibility: {
+    /* ... */
+  },
+  scopeRules: [
+    /* ... */
+  ],
   async execute(params, context) {
     // Implementation
-  }
+  },
 };
 ```
 
 ### 2. Adding New Personalities
+
 Edit `config/personalities.json`:
 
 ```json
@@ -188,12 +198,15 @@ Edit `config/personalities.json`:
   "custom-role": {
     "name": "Custom Role",
     "features": ["feature-1", "feature-2"],
-    "context": { /* ... */ }
+    "context": {
+      /* ... */
+    }
   }
 }
 ```
 
 ### 3. Adding Scope Rules
+
 Extend `src/core/scope-rules/`:
 
 ```javascript

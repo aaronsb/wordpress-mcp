@@ -4,7 +4,7 @@ export class WordPressClient {
   constructor(config) {
     this.baseUrl = config.url?.replace(/\/$/, ''); // Remove trailing slash
     this.auth = this.setupAuth(config);
-    
+
     if (!this.baseUrl) {
       throw new Error('WordPress URL is required');
     }
@@ -22,20 +22,20 @@ export class WordPressClient {
       const credentials = `${config.username}:${config.password}`;
       return `Basic ${Buffer.from(credentials).toString('base64')}`;
     }
-    
+
     throw new Error('WordPress authentication credentials required');
   }
 
   async request(endpoint, options = {}) {
     const url = `${this.baseUrl}/wp-json/wp/v2${endpoint}`;
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': this.auth,
+        Authorization: this.auth,
         'Content-Type': 'application/json',
-        ...options.headers
-      }
+        ...options.headers,
+      },
     });
 
     // Let WordPress errors bubble up with context
@@ -55,7 +55,7 @@ export class WordPressClient {
   async createPost(data) {
     return this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   }
 
@@ -66,13 +66,13 @@ export class WordPressClient {
   async updatePost(id, data) {
     return this.request(`/posts/${id}`, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   }
 
   async deletePost(id, force = false) {
     return this.request(`/posts/${id}?force=${force}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
   }
 
@@ -90,9 +90,9 @@ export class WordPressClient {
     const response = await fetch(`${this.baseUrl}/wp-json/wp/v2/media`, {
       method: 'POST',
       headers: {
-        'Authorization': this.auth
+        Authorization: this.auth,
       },
-      body: formData
+      body: formData,
     });
 
     if (!response.ok) {
@@ -120,7 +120,7 @@ export class WordPressClient {
   async createCategory(data) {
     return this.request('/categories', {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   }
 
@@ -132,7 +132,7 @@ export class WordPressClient {
   async createTag(data) {
     return this.request('/tags', {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   }
 
@@ -145,7 +145,7 @@ export class WordPressClient {
   async moderateComment(id, status) {
     return this.request(`/comments/${id}`, {
       method: 'POST',
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status }),
     });
   }
 
@@ -157,7 +157,7 @@ export class WordPressClient {
   async updateSettings(settings) {
     return this.request('/settings', {
       method: 'POST',
-      body: JSON.stringify(settings)
+      body: JSON.stringify(settings),
     });
   }
 }

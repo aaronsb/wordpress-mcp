@@ -71,7 +71,7 @@ class WordPressAuthorMCP {
   getPersonality() {
     // Check command line arguments
     const args = process.argv.slice(2);
-    const personalityArg = args.find(arg => arg.startsWith('--personality='));
+    const personalityArg = args.find((arg) => arg.startsWith('--personality='));
     if (personalityArg) {
       return personalityArg.split('=')[1];
     }
@@ -91,24 +91,26 @@ class WordPressAuthorMCP {
       switch (request.method) {
         case 'tools/list':
           return {
-            tools: this.tools.map(tool => ({
+            tools: this.tools.map((tool) => ({
               name: tool.name,
               description: tool.description,
-              inputSchema: tool.inputSchema
-            }))
+              inputSchema: tool.inputSchema,
+            })),
           };
 
         case 'tools/call':
           const { name, arguments: args } = request.params;
-          const tool = this.tools.find(t => t.name === name);
-          
+          const tool = this.tools.find((t) => t.name === name);
+
           if (!tool) {
             return {
-              content: [{
-                type: 'text',
-                text: `Tool '${name}' is not available for this personality`
-              }],
-              isError: true
+              content: [
+                {
+                  type: 'text',
+                  text: `Tool '${name}' is not available for this personality`,
+                },
+              ],
+              isError: true,
             };
           }
 

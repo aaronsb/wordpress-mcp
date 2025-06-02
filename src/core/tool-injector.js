@@ -1,6 +1,6 @@
 /**
  * Tool Injector
- * 
+ *
  * Injects tools into the MCP server based on personality mappings.
  * The injection is purely based on the JSON configuration - no complex logic.
  */
@@ -45,20 +45,20 @@ export class ToolInjector {
       inputSchema: feature.inputSchema || {
         type: 'object',
         properties: {},
-        additionalProperties: true
+        additionalProperties: true,
       },
       handler: async (params) => {
         try {
           const result = await feature.execute(params, {
-            wpClient: this.featureRegistry.wpClient
+            wpClient: this.featureRegistry.wpClient,
           });
-          
+
           // Handle WordPress permission errors gracefully
           return this.formatResponse(result);
         } catch (error) {
           return this.formatError(error);
         }
-      }
+      },
     };
   }
 
@@ -68,18 +68,22 @@ export class ToolInjector {
   formatResponse(result) {
     if (typeof result === 'string') {
       return {
-        content: [{
-          type: 'text',
-          text: result
-        }]
+        content: [
+          {
+            type: 'text',
+            text: result,
+          },
+        ],
       };
     }
 
     return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
     };
   }
 
@@ -90,32 +94,38 @@ export class ToolInjector {
     // Check for WordPress permission errors
     if (error.code === 'rest_forbidden' || error.status === 403) {
       return {
-        content: [{
-          type: 'text',
-          text: `Permission denied: ${error.message}\n\nYour WordPress user account doesn't have permission for this action.`
-        }],
-        isError: true
+        content: [
+          {
+            type: 'text',
+            text: `Permission denied: ${error.message}\n\nYour WordPress user account doesn't have permission for this action.`,
+          },
+        ],
+        isError: true,
       };
     }
 
     // Check for authentication errors
     if (error.code === 'rest_not_logged_in' || error.status === 401) {
       return {
-        content: [{
-          type: 'text',
-          text: 'Authentication required. Please check your WordPress credentials.'
-        }],
-        isError: true
+        content: [
+          {
+            type: 'text',
+            text: 'Authentication required. Please check your WordPress credentials.',
+          },
+        ],
+        isError: true,
       };
     }
 
     // Generic error
     return {
-      content: [{
-        type: 'text',
-        text: `Error: ${error.message || 'An unexpected error occurred'}`
-      }],
-      isError: true
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${error.message || 'An unexpected error occurred'}`,
+        },
+      ],
+      isError: true,
     };
   }
 }

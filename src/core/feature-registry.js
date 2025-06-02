@@ -13,22 +13,22 @@ export class FeatureRegistry {
 
   async loadFeatures() {
     const featureDir = join(__dirname, '../features');
-    
+
     try {
       // Load features from each category
       const categories = await readdir(featureDir);
-      
+
       for (const category of categories) {
         const categoryPath = join(featureDir, category);
         const files = await readdir(categoryPath);
-        
+
         for (const file of files) {
           if (file.endsWith('.js')) {
             await this.loadFeature(category, join(categoryPath, file));
           }
         }
       }
-      
+
       console.error(`Loaded ${this.features.size} features across ${categories.length} categories`);
     } catch (error) {
       console.error('Error loading features:', error);
@@ -41,7 +41,7 @@ export class FeatureRegistry {
     try {
       const module = await import(filePath);
       const feature = module.default || module;
-      
+
       // Validate feature structure
       if (!feature.name || !feature.execute) {
         console.error(`Invalid feature in ${filePath}: missing name or execute`);
@@ -53,13 +53,12 @@ export class FeatureRegistry {
       feature.category = category;
 
       this.features.set(feature.name, feature);
-      
+
       // Track categories
       if (!this.categories.has(category)) {
         this.categories.set(category, []);
       }
       this.categories.get(category).push(feature.name);
-      
     } catch (error) {
       console.error(`Failed to load feature ${filePath}:`, error);
     }
@@ -73,45 +72,45 @@ export class FeatureRegistry {
         description: 'Create a draft article',
         category: 'content',
         eligibility: {
-          personalities: ['contributor', 'author', 'administrator']
+          personalities: ['contributor', 'author', 'administrator'],
         },
         inputSchema: {
           type: 'object',
           properties: {
             title: { type: 'string', description: 'Article title' },
-            content: { type: 'string', description: 'Article content' }
+            content: { type: 'string', description: 'Article content' },
           },
-          required: ['title', 'content']
+          required: ['title', 'content'],
         },
         scopeRules: [],
         async execute(params, context) {
           const post = await this.wpClient.createPost({
             title: params.title,
             content: params.content,
-            status: 'draft'
+            status: 'draft',
           });
           return {
             success: true,
             postId: post.id,
-            message: `Draft created: "${params.title}"`
+            message: `Draft created: "${params.title}"`,
           };
-        }
+        },
       },
       {
         name: 'create-article',
         description: 'Create and optionally publish an article',
         category: 'content',
         eligibility: {
-          personalities: ['author', 'administrator']
+          personalities: ['author', 'administrator'],
         },
         inputSchema: {
           type: 'object',
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
-            publish: { type: 'boolean', default: false }
+            publish: { type: 'boolean', default: false },
           },
-          required: ['title', 'content']
+          required: ['title', 'content'],
         },
         scopeRules: ['can_publish'],
         async execute(params, context) {
@@ -119,19 +118,19 @@ export class FeatureRegistry {
           const post = await this.wpClient.createPost({
             title: params.title,
             content: params.content,
-            status
+            status,
           });
           return {
             success: true,
             postId: post.id,
             status,
-            message: `Article ${status === 'publish' ? 'published' : 'drafted'}: "${params.title}"`
+            message: `Article ${status === 'publish' ? 'published' : 'drafted'}: "${params.title}"`,
           };
-        }
-      }
+        },
+      },
     ];
 
-    builtInFeatures.forEach(feature => {
+    builtInFeatures.forEach((feature) => {
       feature.wpClient = this.wpClient;
       this.features.set(feature.name, feature);
     });
@@ -194,8 +193,8 @@ export class FeatureRegistry {
       inputSchema: feature.inputSchema || {
         type: 'object',
         properties: {},
-        additionalProperties: true
-      }
+        additionalProperties: true,
+      },
     };
   }
 }

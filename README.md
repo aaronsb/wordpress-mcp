@@ -49,6 +49,7 @@ npx wordpress-author-mcp --personality=administrator
 The tool mappings are defined in `config/personalities.json`:
 
 ### Contributor
+
 - `draft-article` - Create draft posts
 - `edit-draft` - Edit existing drafts
 - `submit-for-review` - Submit drafts for editorial review
@@ -56,6 +57,7 @@ The tool mappings are defined in `config/personalities.json`:
 - `suggest-metadata` - Propose categories and tags
 
 ### Author
+
 - All contributor tools, plus:
 - `create-article` - Create and publish posts
 - `publish-workflow` - Publish or schedule posts
@@ -64,6 +66,7 @@ The tool mappings are defined in `config/personalities.json`:
 - `manage-own-content` - Manage your own posts
 
 ### Administrator
+
 - All author tools, plus:
 - `bulk-content-operations` - Bulk actions on posts
 - `manage-all-content` - View and manage all posts
@@ -80,12 +83,7 @@ Edit `config/personalities.json` to create custom role mappings:
   "editor": {
     "name": "Editor",
     "description": "Editorial team member",
-    "features": [
-      "manage-all-content",
-      "edit-draft",
-      "publish-workflow",
-      "bulk-content-operations"
-    ],
+    "features": ["manage-all-content", "edit-draft", "publish-workflow", "bulk-content-operations"],
     "context": {
       "can_publish": true,
       "can_edit_others": true
@@ -95,6 +93,7 @@ Edit `config/personalities.json` to create custom role mappings:
 ```
 
 Then launch with:
+
 ```bash
 npx wordpress-author-mcp --personality=editor
 ```
@@ -107,16 +106,16 @@ Add a new feature by creating a file in `src/features/category/feature-name.js`:
 export default {
   name: 'feature-name',
   description: 'What this feature does',
-  
+
   inputSchema: {
     // JSON Schema for parameters
   },
-  
+
   async execute(params, context) {
     const { wpClient } = context;
     // Implementation using wpClient
     return result;
-  }
+  },
 };
 ```
 

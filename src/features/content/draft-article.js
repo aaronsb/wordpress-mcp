@@ -1,52 +1,52 @@
 /**
  * Draft Article Feature
- * 
+ *
  * Creates a draft article - available to all personalities
  */
 
 export default {
   name: 'draft-article',
   description: 'Create a draft article that can be reviewed before publishing',
-  
+
   inputSchema: {
     type: 'object',
     properties: {
       title: {
         type: 'string',
-        description: 'Article title'
+        description: 'Article title',
       },
       content: {
         type: 'string',
-        description: 'Article content (HTML or plain text)'
+        description: 'Article content (HTML or plain text)',
       },
       excerpt: {
         type: 'string',
-        description: 'Brief summary of the article (optional)'
+        description: 'Brief summary of the article (optional)',
       },
       categories: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Category names or IDs (optional)'
+        description: 'Category names or IDs (optional)',
       },
       tags: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Tag names (optional)'
-      }
+        description: 'Tag names (optional)',
+      },
     },
-    required: ['title', 'content']
+    required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
-    
+
     try {
       // Prepare post data
       const postData = {
         title: params.title,
         content: params.content,
         status: 'draft', // Always draft for this feature
-        excerpt: params.excerpt || ''
+        excerpt: params.excerpt || '',
       };
 
       // Handle categories if provided
@@ -68,9 +68,8 @@ export default {
         title: post.title.rendered,
         status: post.status,
         editLink: post.link.replace(wpClient.baseUrl, '') + '?preview=true',
-        message: `Draft created successfully: "${params.title}"`
+        message: `Draft created successfully: "${params.title}"`,
       };
-
     } catch (error) {
       // WordPress will return appropriate error if user can't create posts
       throw error;
@@ -90,10 +89,8 @@ export default {
       }
 
       // Find by name
-      const existing = existingCats.find(c => 
-        c.name.toLowerCase() === cat.toLowerCase()
-      );
-      
+      const existing = existingCats.find((c) => c.name.toLowerCase() === cat.toLowerCase());
+
       if (existing) {
         catIds.push(existing.id);
       }
@@ -114,9 +111,7 @@ export default {
       } catch (error) {
         // If can't create, try to find existing
         const existingTags = await wpClient.getTags();
-        const existing = existingTags.find(t => 
-          t.name.toLowerCase() === tagName.toLowerCase()
-        );
+        const existing = existingTags.find((t) => t.name.toLowerCase() === tagName.toLowerCase());
         if (existing) {
           tagIds.push(existing.id);
         }
@@ -125,5 +120,5 @@ export default {
     }
 
     return tagIds;
-  }
+  },
 };

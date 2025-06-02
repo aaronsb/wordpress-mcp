@@ -6,7 +6,15 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "lint": "prettier --check .",
+    "lint:fix": "prettier --write .",
+    "check": "npm run lint && npm test",
+    "contributor": "node src/server.js --personality=contributor",
+    "author": "node src/server.js --personality=author",
+    "admin": "node src/server.js --personality=administrator"
   },
   "keywords": [
     "mcp",
