@@ -85,47 +85,54 @@ class WordPressAuthorMCP {
   }
 
   setupHandlers() {
-    // Register each tool with the McpServer
+    // Register each tool with the McpServer using the proper API
     this.tools.forEach((tool) => {
-      // For now, use the simpler approach with manual schema override
-      this.server._registeredTools[tool.name] = {
-        description: tool.description,
-        inputSchema: this.convertToZodSchema(tool.inputSchema),
-        handler: async (params) => await tool.handler(params),
-        enabled: true
-      };
+      this.server.registerTool(
+        tool.name,
+        {
+          description: tool.description,
+          inputSchema: this.convertToZodSchema(tool.inputSchema),
+        },
+        async (params) => await tool.handler(params)
+      );
     });
-    
-    // Initialize tool handlers after all tools are registered
-    this.server.setToolRequestHandlers();
   }
 
   convertToZodSchema(inputSchema) {
     if (!inputSchema || !inputSchema.properties) {
-      return z.object({});
+      return {};
     }
 
-    const shape = {};
+    const zodSchema = {};
     for (const [key, value] of Object.entries(inputSchema.properties)) {
+      let fieldSchema;
+      
       if (value.type === 'string') {
-        shape[key] = value.enum ? z.enum(value.enum) : z.string();
+        fieldSchema = value.enum ? z.enum(value.enum) : z.string();
       } else if (value.type === 'number') {
-        shape[key] = z.number();
+        fieldSchema = z.number();
       } else if (value.type === 'boolean') {
-        shape[key] = z.boolean();
+        fieldSchema = z.boolean();
       } else if (value.type === 'array') {
-        shape[key] = z.array(z.any());
+        fieldSchema = z.array(z.any());
       } else {
-        shape[key] = z.any();
+        fieldSchema = z.any();
+      }
+
+      // Add description if available
+      if (value.description) {
+        fieldSchema = fieldSchema.describe(value.description);
       }
 
       // Handle optional fields
       if (!inputSchema.required || !inputSchema.required.includes(key)) {
-        shape[key] = shape[key].optional();
+        fieldSchema = fieldSchema.optional();
       }
+      
+      zodSchema[key] = fieldSchema;
     }
 
-    return z.object(shape);
+    return zodSchema;
   }
 
   setupErrorHandling() {

@@ -1,28 +1,49 @@
 {
+  "subscriber": {
+    "name": "Subscriber",
+    "description": "Basic site access - read content and manage own profile",
+    "features": ["view-content", "manage-profile"],
+    "context": {
+      "can_publish": false,
+      "can_upload_media": false,
+      "can_edit_others": false,
+      "workflow_stage": "consumption",
+      "access_level": "read_only"
+    }
+  },
+
   "contributor": {
     "name": "Contributor",
-    "description": "Draft content for editorial review - focused on content creation without publishing rights",
-    "features": ["draft-article", "edit-draft", "submit-for-review", "view-editorial-feedback"],
+    "description": "Create and edit draft content for editorial review",
+    "features": [
+      "draft-article",
+      "edit-draft", 
+      "submit-for-review",
+      "view-editorial-feedback",
+      "manage-own-drafts"
+    ],
     "context": {
       "can_publish": false,
       "can_upload_media": false,
       "can_edit_others": false,
       "workflow_stage": "creation",
-      "default_post_status": "draft"
+      "default_post_status": "draft",
+      "scope": "own_content_only"
     }
   },
 
   "author": {
     "name": "Author",
-    "description": "Create and publish own content with full media capabilities",
+    "description": "Create, publish and manage own content with media capabilities",
     "features": [
       "draft-article",
       "edit-draft",
-      "submit-for-review",
+      "submit-for-review", 
       "view-editorial-feedback",
       "create-article",
       "publish-workflow",
-      "manage-media"
+      "manage-media",
+      "manage-own-content"
     ],
     "context": {
       "can_publish": true,
@@ -30,32 +51,57 @@
       "can_edit_others": false,
       "workflow_stage": "publication",
       "default_post_status": "draft",
-      "publish_capability": "own_only"
+      "publish_capability": "own_content",
+      "scope": "own_content_only"
+    }
+  },
+
+  "editor": {
+    "name": "Editor",
+    "description": "Manage content workflow, moderate submissions and oversee publication",
+    "features": [
+      "draft-article",
+      "edit-draft",
+      "create-article", 
+      "publish-workflow",
+      "manage-media",
+      "review-submissions",
+      "moderate-content",
+      "manage-categories",
+      "editorial-workflow",
+      "content-planning"
+    ],
+    "context": {
+      "can_publish": true,
+      "can_upload_media": true,
+      "can_edit_others": true,
+      "can_moderate": true,
+      "workflow_stage": "editorial",
+      "default_post_status": "draft",
+      "publish_capability": "all_content",
+      "scope": "site_wide"
     }
   },
 
   "administrator": {
-    "name": "Administrator",
-    "description": "Full site and content management with advanced capabilities",
+    "name": "Administrator", 
+    "description": "Full site management with advanced configuration capabilities",
     "features": [
-      "draft-article",
-      "edit-draft",
-      "submit-for-review",
-      "view-editorial-feedback",
-      "create-article",
-      "publish-workflow",
-      "manage-media",
-      "bulk-content-operations",
-      "manage-all-content"
+      "site-management",
+      "user-management", 
+      "system-configuration",
+      "advanced-settings"
     ],
     "context": {
       "can_publish": true,
       "can_upload_media": true,
       "can_edit_others": true,
       "can_manage_site": true,
-      "workflow_stage": "management",
+      "can_manage_users": true,
+      "workflow_stage": "administration",
       "default_post_status": "publish",
-      "publish_capability": "all_content"
+      "access_level": "full_access",
+      "scope": "site_wide"
     }
   }
 }

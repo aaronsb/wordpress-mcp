@@ -8,6 +8,11 @@ export class WordPressClient {
     if (!this.baseUrl) {
       throw new Error('WordPress URL is required');
     }
+    
+    // Cache for discovered features
+    this.featuresCache = null;
+    this.featuresCacheTime = 0;
+    this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   }
 
   setupAuth(config) {
@@ -51,11 +56,97 @@ export class WordPressClient {
     return response.json();
   }
 
+  // Feature API methods
+  async discoverFeatures(useCache = true) {
+    // Check cache first
+    if (useCache && this.featuresCache && Date.now() - this.featuresCacheTime < this.CACHE_DURATION) {
+      return this.featuresCache;
+    }
+
+    try {
+      const features = await this.request('/features');
+      this.featuresCache = features;
+      this.featuresCacheTime = Date.now();
+      return features;
+    } catch (error) {
+      console.error('Failed to discover features:', error.message);
+      return [];
+    }
+  }
+
+  async getFeature(featureId) {
+    const features = await this.discoverFeatures();
+    return features.find(f => f.id === featureId);
+  }
+
+  async executeFeature(featureId, params = {}) {
+    const feature = await this.getFeature(featureId);
+    if (!feature) {
+      throw new Error(`Feature ${featureId} not found`);
+    }
+
+    // Find the run link
+    const runLink = feature._links?.run?.[0];
+    if (!runLink) {
+      throw new Error(`Feature ${featureId} has no run link`);
+    }
+
+    // Execute based on method
+    const method = runLink.method || 'GET';
+    const url = runLink.href;
+    
+    if (method === 'GET') {
+      // For GET requests, add params as query string
+      const query = new URLSearchParams(params).toString();
+      const fullUrl = query ? `${url}?${query}` : url;
+      
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: this.auth,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Feature execution failed: ${response.status}`);
+      }
+
+      return response.json();
+    } else {
+      // For POST requests, send params as body
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          Authorization: this.auth,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Feature execution failed: ${response.status}`);
+      }
+
+      return response.json();
+    }
+  }
+
   // Post operations
   async createPost(data) {
+    // WordPress REST API expects title and content as objects with 'raw' property
+    const postData = {
+      ...data,
+      title: typeof data.title === 'string' ? { raw: data.title } : data.title,
+      content: typeof data.content === 'string' ? { raw: data.content } : data.content,
+    };
+    
     return this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(postData),
     });
   }
 
@@ -64,9 +155,18 @@ export class WordPressClient {
   }
 
   async updatePost(id, data) {
+    // WordPress REST API expects title and content as objects with 'raw' property
+    const postData = { ...data };
+    if (data.title && typeof data.title === 'string') {
+      postData.title = { raw: data.title };
+    }
+    if (data.content && typeof data.content === 'string') {
+      postData.content = { raw: data.content };
+    }
+    
     return this.request(`/posts/${id}`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(postData),
     });
   }
 

@@ -41,12 +41,12 @@ export default {
     const { wpClient } = context;
 
     try {
-      // Prepare post data
+      // Prepare post data for Feature API
       const postData = {
-        title: params.title,
-        content: params.content,
+        title: { raw: params.title },
+        content: { raw: params.content },
         status: 'draft', // Always draft for this feature
-        excerpt: params.excerpt || '',
+        excerpt: { raw: params.excerpt || '' },
       };
 
       // Handle categories if provided
@@ -59,8 +59,8 @@ export default {
         postData.tags = await this.resolveTags(params.tags, wpClient);
       }
 
-      // Create the post
-      const post = await wpClient.createPost(postData);
+      // Use Feature API to create the post
+      const post = await wpClient.executeFeature('tool-posts', postData);
 
       return {
         success: true,
