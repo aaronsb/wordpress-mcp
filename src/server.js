@@ -5,14 +5,23 @@ import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
+import { existsSync } from 'fs';
+import { homedir } from 'os';
 import { z } from 'zod';
 import { PersonalityManager } from './core/personality-manager.js';
 import { FeatureRegistry } from './core/feature-registry.js';
 import { WordPressClient } from './core/wordpress-client.js';
 import { ToolInjector } from './core/tool-injector.js';
 
-// Load environment variables
+// Load environment variables from multiple locations
+// 1. Local .env file in server directory
 config();
+
+// 2. User's home directory ~/.wordpress-mcp/.env
+const homeEnvPath = join(homedir(), '.wordpress-mcp', '.env');
+if (existsSync(homeEnvPath)) {
+  config({ path: homeEnvPath, override: false });
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

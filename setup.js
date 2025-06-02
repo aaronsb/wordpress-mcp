@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import { createInterface } from 'readline';
-import { writeFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const globalConfigDir = join(homedir(), '.wordpress-mcp');
+const globalEnvPath = join(globalConfigDir, '.env');
 
 const rl = createInterface({
   input: process.stdin,
@@ -21,18 +24,36 @@ async function setup() {
   try {
     let skipEnvCreation = false;
     let wpUrl, wpUsername, wpAppPassword;
+    let envPath = globalEnvPath;
 
-    // Check if .env already exists
-    if (existsSync('.env')) {
-      const overwrite = await question('.env file already exists. Overwrite? (y/N): ');
+    // Ask where to save the .env file
+    console.log('📂 Configuration Location\n');
+    console.log('Where would you like to save your WordPress credentials?\n');
+    console.log('1. Global location (~/.wordpress-mcp/.env) - Recommended');
+    console.log('2. Local directory (./.env) - For development\n');
+    
+    const locationChoice = await question('Choose location (1-2) [1]: ') || '1';
+    
+    if (locationChoice === '2') {
+      envPath = '.env';
+    } else {
+      // Create global config directory if it doesn't exist
+      if (!existsSync(globalConfigDir)) {
+        mkdirSync(globalConfigDir, { recursive: true });
+      }
+    }
+
+    // Check if .env already exists at chosen location
+    if (existsSync(envPath)) {
+      const overwrite = await question(`\n${envPath} already exists. Overwrite? (y/N): `);
       if (overwrite.toLowerCase() !== 'y') {
-        console.log('\n✓ Keeping existing .env file.');
+        console.log(`\n✓ Keeping existing ${envPath} file.`);
         skipEnvCreation = true;
         
             // Try to read existing .env for config examples
         try {
           const { readFileSync } = await import('fs');
-          const envContent = readFileSync('.env', 'utf-8');
+          const envContent = readFileSync(envPath, 'utf-8');
           const envVars = {};
           envContent.split('\n').forEach(line => {
             const match = line.match(/^([^#=]+)=(.*)$/);
@@ -115,8 +136,8 @@ WORDPRESS_APP_PASSWORD=${wpAppPassword}
 MCP_PERSONALITY=${defaultPersonality}
 `;
 
-      writeFileSync('.env', envContent);
-      console.log('\n✅ Created .env file successfully!');
+      writeFileSync(envPath, envContent);
+      console.log(`\n✅ Created ${envPath} file successfully!`);
     }
 
     // Get absolute path for configurations
@@ -157,8 +178,8 @@ MCP_PERSONALITY=${defaultPersonality}
     console.log('```json');
     console.log(JSON.stringify(claudeDesktopConfig, null, 2));
     console.log('```');
-    console.log('\nNote: The server will read credentials from the .env file in:');
-    console.log(`      ${__dirname}`);
+    console.log('\nNote: The server will read credentials from:');
+    console.log(`      ${resolve(envPath)}`);
 
     // Show Claude Code configuration
     console.log('\n💻 Claude Code Configuration\n');

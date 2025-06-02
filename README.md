@@ -51,22 +51,43 @@ npm install
 
 ### 1. WordPress Setup
 
-Create a `.env` file in the wordpress-mcp directory with your WordPress credentials:
+The server looks for credentials in this order:
+1. Environment variables (`WORDPRESS_URL`, `WORDPRESS_USERNAME`, `WORDPRESS_APP_PASSWORD`)
+2. `.env` file in `~/.wordpress-mcp/` (recommended for global use)
+3. `.env` file in the server directory (for development)
 
-```env
+#### Option A: Use the Setup Wizard (Recommended)
+
+Run the interactive setup:
+```bash
+npm run setup
+```
+
+This will:
+- Ask where to save your credentials (global or local)
+- Collect your WordPress site details
+- Create the `.env` file automatically
+- Show you ready-to-paste configurations
+
+#### Option B: Manual Setup
+
+Create a `.env` file in `~/.wordpress-mcp/`:
+
+```bash
+mkdir -p ~/.wordpress-mcp
+cat > ~/.wordpress-mcp/.env << EOF
 WORDPRESS_URL=https://your-site.com
 WORDPRESS_USERNAME=your-username
 WORDPRESS_APP_PASSWORD=your-app-password
+EOF
 ```
 
 **Note**: Use Application Passwords for better security. Generate one at:
 `Users > Your Profile > Application Passwords` in your WordPress admin.
 
-**Alternative**: You can also set these as environment variables instead of using a `.env` file.
-
 ### 2. Claude Desktop Setup
 
-First, ensure your `.env` file is configured in the wordpress-mcp directory (run `npm run setup` if needed).
+First, ensure your credentials are configured (run `npm run setup` if needed).
 
 Add to your Claude Desktop configuration file:
 
