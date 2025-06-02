@@ -151,7 +151,19 @@ MCP_PERSONALITY=${defaultPersonality}
 
     // Show Claude Code configuration
     console.log('\n💻 Claude Code Configuration\n');
-    console.log('Add this to your project\'s .claude/settings.json:\n');
+    console.log('Option 1: Use the CLI command (recommended):\n');
+    
+    const escapedPassword = wpAppPassword.replace(/"/g, '\\"');
+    console.log('```bash');
+    console.log(`claude mcp add wordpress-author \\`);
+    console.log(`  node ${serverPath} \\`);
+    console.log(`  --personality=${defaultPersonality} \\`);
+    console.log(`  -e WORDPRESS_URL=${wpUrl.replace(/\/$/, '')} \\`);
+    console.log(`  -e WORDPRESS_USERNAME=${wpUsername} \\`);
+    console.log(`  -e "WORDPRESS_APP_PASSWORD=${escapedPassword}"`);
+    console.log('```');
+    
+    console.log('\nOption 2: Manually add to your project\'s .claude/settings.json:\n');
     
     const claudeCodeConfig = {
       mcpServers: {

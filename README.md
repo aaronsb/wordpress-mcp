@@ -90,7 +90,24 @@ Add to your Claude Desktop configuration file:
 
 ### 3. Claude Code Setup
 
-In your project's `.claude/settings.json`:
+#### Option A: Using the CLI (Recommended)
+
+In your project directory, run:
+
+```bash
+claude mcp add wordpress-author \
+  node /path/to/wordpress-mcp/src/server.js \
+  --personality=author \
+  -e WORDPRESS_URL=https://your-site.com \
+  -e WORDPRESS_USERNAME=your-username \
+  -e "WORDPRESS_APP_PASSWORD=your-app-password"
+```
+
+This will automatically add the configuration to your project.
+
+#### Option B: Manual Configuration
+
+Alternatively, add to your project's `.claude/settings.json`:
 
 ```json
 {
@@ -98,7 +115,7 @@ In your project's `.claude/settings.json`:
     "wordpress-author": {
       "command": "node",
       "args": [
-        "./node_modules/wordpress-mcp/src/server.js",
+        "/path/to/wordpress-mcp/src/server.js",
         "--personality=author"
       ],
       "env": {
