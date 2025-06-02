@@ -1,9 +1,12 @@
 {
-  "name": "wordpress-author-mcp",
+  "name": "wordpress-mcp",
   "version": "1.0.0",
   "description": "Semantic WordPress authoring MCP server with personality-based tool filtering",
   "type": "module",
   "main": "src/server.js",
+  "bin": {
+    "wordpress-mcp": "./src/server.js"
+  },
   "scripts": {
     "setup": "node setup.js",
     "start": "node src/server.js",
