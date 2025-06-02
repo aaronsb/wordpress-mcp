@@ -1,0 +1,32 @@
+{
+  "name": "wordpress-author-mcp",
+  "version": "1.0.0",
+  "description": "Semantic WordPress authoring MCP server with personality-based tool filtering",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "wordpress",
+    "cms",
+    "authoring",
+    "model-context-protocol"
+  ],
+  "author": "Aaron & Claude",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@wordpress/api-fetch": "^7.24.0",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

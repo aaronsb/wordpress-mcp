@@ -1,0 +1,66 @@
+{
+  "contributor": {
+    "name": "Contributor",
+    "description": "Draft content for editorial review - focused on content creation without publishing rights",
+    "features": [
+      "draft-article",
+      "edit-draft",
+      "submit-for-review",
+      "view-editorial-feedback"
+    ],
+    "context": {
+      "can_publish": false,
+      "can_upload_media": false,
+      "can_edit_others": false,
+      "workflow_stage": "creation",
+      "default_post_status": "draft"
+    }
+  },
+  
+  "author": {
+    "name": "Author",
+    "description": "Create and publish own content with full media capabilities",
+    "features": [
+      "draft-article",
+      "edit-draft",
+      "submit-for-review",
+      "view-editorial-feedback",
+      "create-article",
+      "publish-workflow",
+      "manage-media"
+    ],
+    "context": {
+      "can_publish": true,
+      "can_upload_media": true,
+      "can_edit_others": false,
+      "workflow_stage": "publication",
+      "default_post_status": "draft",
+      "publish_capability": "own_only"
+    }
+  },
+  
+  "administrator": {
+    "name": "Administrator",
+    "description": "Full site and content management with advanced capabilities",
+    "features": [
+      "draft-article",
+      "edit-draft",
+      "submit-for-review",
+      "view-editorial-feedback",
+      "create-article",
+      "publish-workflow",
+      "manage-media",
+      "bulk-content-operations",
+      "manage-all-content"
+    ],
+    "context": {
+      "can_publish": true,
+      "can_upload_media": true,
+      "can_edit_others": true,
+      "can_manage_site": true,
+      "workflow_stage": "management",
+      "default_post_status": "publish",
+      "publish_capability": "all_content"
+    }
+  }
+}
