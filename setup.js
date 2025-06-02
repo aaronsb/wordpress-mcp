@@ -19,30 +19,74 @@ console.log('This wizard will help you configure your WordPress MCP server.\n');
 
 async function setup() {
   try {
+    let skipEnvCreation = false;
+    let wpUrl, wpUsername, wpAppPassword;
+
     // Check if .env already exists
     if (existsSync('.env')) {
       const overwrite = await question('.env file already exists. Overwrite? (y/N): ');
       if (overwrite.toLowerCase() !== 'y') {
-        console.log('\nSetup cancelled. Your existing .env file was preserved.');
-        process.exit(0);
+        console.log('\n✓ Keeping existing .env file.');
+        skipEnvCreation = true;
+        
+            // Try to read existing .env for config examples
+        try {
+          const { readFileSync } = await import('fs');
+          const envContent = readFileSync('.env', 'utf-8');
+          const envVars = {};
+          envContent.split('\n').forEach(line => {
+            const match = line.match(/^([^#=]+)=(.*)$/);
+            if (match) {
+              envVars[match[1].trim()] = match[2].trim();
+            }
+          });
+          
+          // Check if required values exist
+          const hasUrl = envVars.WORDPRESS_URL && envVars.WORDPRESS_URL !== '';
+          const hasUsername = envVars.WORDPRESS_USERNAME && envVars.WORDPRESS_USERNAME !== '';
+          const hasPassword = envVars.WORDPRESS_APP_PASSWORD && envVars.WORDPRESS_APP_PASSWORD !== '';
+          
+          if (!hasUrl || !hasUsername || !hasPassword) {
+            console.log('\n⚠️  Warning: Your .env file appears to be missing required values.');
+            console.log('   Consider running setup again and choosing to overwrite.\n');
+            wpUrl = 'https://your-site.com';
+            wpUsername = 'your-username';
+            wpAppPassword = 'your-app-password';
+            console.log('📋 Showing configuration examples with placeholder values.\n');
+          } else {
+            wpUrl = envVars.WORDPRESS_URL;
+            wpUsername = envVars.WORDPRESS_USERNAME;
+            wpAppPassword = envVars.WORDPRESS_APP_PASSWORD;
+            console.log('\n📋 Using values from existing .env for configuration examples.\n');
+          }
+        } catch (e) {
+          // If we can't read .env, use placeholder values
+          wpUrl = 'https://your-site.com';
+          wpUsername = 'your-username';
+          wpAppPassword = 'your-app-password';
+          console.log('\n📋 Showing configuration examples with placeholder values.\n');
+        }
       }
     }
 
-    // Collect WordPress details
-    console.log('\n📝 WordPress Configuration\n');
-    
-    const wpUrl = await question('WordPress Site URL (e.g., https://example.com): ');
-    if (!wpUrl.startsWith('http')) {
-      console.error('\n❌ Error: URL must start with http:// or https://');
-      process.exit(1);
-    }
+    // Only collect details if we're creating/updating .env
+    if (!skipEnvCreation) {
+      // Collect WordPress details
+      console.log('\n📝 WordPress Configuration\n');
+      
+      wpUrl = await question('WordPress Site URL (e.g., https://example.com): ');
+      if (!wpUrl.startsWith('http')) {
+        console.error('\n❌ Error: URL must start with http:// or https://');
+        process.exit(1);
+      }
 
-    const wpUsername = await question('WordPress Username: ');
-    
-    console.log('\n💡 Tip: Use Application Passwords for better security.');
-    console.log('   Generate one at: Users > Your Profile > Application Passwords\n');
-    
-    const wpAppPassword = await question('WordPress Application Password: ');
+      wpUsername = await question('WordPress Username: ');
+      
+      console.log('\n💡 Tip: Use Application Passwords for better security.');
+      console.log('   Generate one at: Users > Your Profile > Application Passwords\n');
+      
+      wpAppPassword = await question('WordPress Application Password: ');
+    }
 
     // Ask about default personality
     console.log('\n🎭 Default Personality Selection\n');
@@ -58,8 +102,9 @@ async function setup() {
     };
     const defaultPersonality = personalities[personalityChoice] || 'author';
 
-    // Create .env file
-    const envContent = `# WordPress site URL (without trailing slash)
+    // Create .env file only if not skipping
+    if (!skipEnvCreation) {
+      const envContent = `# WordPress site URL (without trailing slash)
 WORDPRESS_URL=${wpUrl.replace(/\/$/, '')}
 
 # WordPress authentication
@@ -70,8 +115,9 @@ WORDPRESS_APP_PASSWORD=${wpAppPassword}
 MCP_PERSONALITY=${defaultPersonality}
 `;
 
-    writeFileSync('.env', envContent);
-    console.log('\n✅ Created .env file successfully!');
+      writeFileSync('.env', envContent);
+      console.log('\n✅ Created .env file successfully!');
+    }
 
     // Get absolute path for configurations
     const serverPath = resolve(__dirname, 'src/server.js');
