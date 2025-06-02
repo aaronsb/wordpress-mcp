@@ -1,10 +1,36 @@
 # WordPress Author MCP Server
 
-A personality-based Model Context Protocol (MCP) server for WordPress that provides role-appropriate tools for content management.
+A personality-based Model Context Protocol (MCP) server for WordPress that provides role-appropriate tools for content management. This server enables AI assistants like Claude to create, edit, and manage WordPress content through natural language interactions.
 
-## Key Design Principle: Map-Based Architecture
+## Purpose & Features
 
-This MCP server uses a **map-based approach** rather than hardcoded role logic. The personality-to-tool mappings are entirely defined in JSON configuration, making the system flexible and easy to customize without modifying code.
+- **🎭 Personality-Based Tool Mapping**: Three modes (Contributor/Author/Administrator) with role-appropriate tools
+- **🔧 Semantic Operations**: High-level WordPress actions without API complexity
+- **🛡️ WordPress-Native Permissions**: Let WordPress handle all permission enforcement
+- **📝 Content Management**: Create drafts, publish posts, schedule content, manage media
+- **⚡ Map-Based Architecture**: JSON configuration for tool assignments, no hardcoded roles
+
+## Quick Start
+
+The fastest way to get started:
+
+```bash
+# Clone and install
+git clone https://github.com/aaronsb/wordpress-mcp
+cd wordpress-mcp
+npm install
+
+# Run interactive setup
+npm run setup
+```
+
+The setup wizard will:
+1. Ask for your WordPress site URL and credentials
+2. Help you choose a default personality (Contributor/Author/Administrator)
+3. Create your `.env` configuration file
+4. Generate ready-to-paste configurations for Claude Desktop and Claude Code
+
+Just copy the generated configuration to your Claude settings and you're ready to go!
 
 ## How It Works
 
@@ -16,10 +42,14 @@ This MCP server uses a **map-based approach** rather than hardcoded role logic. 
 ## Installation
 
 ```bash
+git clone https://github.com/aaronsb/wordpress-mcp
+cd wordpress-mcp
 npm install
 ```
 
 ## Configuration
+
+### 1. WordPress Setup
 
 Create a `.env` file with your WordPress credentials:
 
@@ -29,20 +59,78 @@ WORDPRESS_USERNAME=your-username
 WORDPRESS_APP_PASSWORD=your-app-password
 ```
 
+**Note**: Use Application Passwords for better security. Generate one at:
+`Users > Your Profile > Application Passwords` in your WordPress admin.
+
+### 2. Claude Desktop Setup
+
+Add to your Claude Desktop configuration file:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "wordpress-author": {
+      "command": "node",
+      "args": [
+        "/path/to/wordpress-mcp/src/server.js",
+        "--personality=author"
+      ],
+      "env": {
+        "WORDPRESS_URL": "https://your-site.com",
+        "WORDPRESS_USERNAME": "your-username",
+        "WORDPRESS_APP_PASSWORD": "your-app-password"
+      }
+    }
+  }
+}
+```
+
+### 3. Claude Code Setup
+
+In your project's `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "wordpress-author": {
+      "command": "node",
+      "args": [
+        "./node_modules/wordpress-mcp/src/server.js",
+        "--personality=author"
+      ],
+      "env": {
+        "WORDPRESS_URL": "https://your-site.com",
+        "WORDPRESS_USERNAME": "your-username",
+        "WORDPRESS_APP_PASSWORD": "your-app-password"
+      }
+    }
+  }
+}
+```
+
+**Note**: Adjust the personality parameter (`--personality=`) to one of:
+- `contributor` - Limited tools for content creation
+- `author` - Full authoring capabilities (recommended)
+- `administrator` - Complete site management
+
 ## Usage
 
-Launch the MCP server with a specific personality:
+Once configured, the WordPress tools will be available in Claude. You can:
 
-```bash
-# Contributor personality - limited tools for content creation
-npx wordpress-author-mcp --personality=contributor
+- Create and edit draft posts
+- Publish articles with scheduling options
+- Manage media files
+- Perform bulk operations (admin only)
+- Search and filter all content (admin only)
 
-# Author personality - full authoring capabilities
-npx wordpress-author-mcp --personality=author
-
-# Administrator personality - complete site management
-npx wordpress-author-mcp --personality=administrator
-```
+Example prompts:
+- "Create a draft blog post about AI development"
+- "Publish my draft with ID 30"
+- "Schedule a post for next Monday at 9 AM"
+- "Show me all draft posts"
 
 ## Personality Mappings
 
@@ -98,28 +186,13 @@ Then launch with:
 npx wordpress-author-mcp --personality=editor
 ```
 
-## Creating New Features
+## Customization
 
-Add a new feature by creating a file in `src/features/category/feature-name.js`:
-
-```javascript
-export default {
-  name: 'feature-name',
-  description: 'What this feature does',
-
-  inputSchema: {
-    // JSON Schema for parameters
-  },
-
-  async execute(params, context) {
-    const { wpClient } = context;
-    // Implementation using wpClient
-    return result;
-  },
-};
-```
-
-Then add it to any personality in `config/personalities.json`.
+See [CUSTOMIZATION.md](CUSTOMIZATION.md) for detailed instructions on:
+- Creating custom personalities
+- Adding new features
+- Configuring role-based tool mappings
+- Real-world examples (Editor, Reviewer, Social Media Manager)
 
 ## Architecture Benefits
 
