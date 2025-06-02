@@ -16,6 +16,7 @@
     "name": "Contributor",
     "description": "Create and edit draft content for editorial review",
     "features": [
+      "find-posts",
       "draft-article",
       "edit-draft", 
       "submit-for-review",
@@ -36,6 +37,7 @@
     "name": "Author",
     "description": "Create, publish and manage own content with media capabilities",
     "features": [
+      "search-posts",
       "draft-article",
       "edit-draft",
       "submit-for-review", 
@@ -60,6 +62,7 @@
     "name": "Editor",
     "description": "Manage content workflow, moderate submissions and oversee publication",
     "features": [
+      "search-posts",
       "draft-article",
       "edit-draft",
       "create-article", 

@@ -339,6 +339,33 @@ export class FeatureMapper {
         return this.sessionManager.closeSession(params.documentHandle);
       }
     });
+
+    // Find Posts for Workflow - semantic search that guides to next action
+    this.featureMap.set('find-posts', {
+      name: 'Find Posts',
+      description: 'Search for posts to work with - results include suggested next actions based on your role',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search terms to find in titles or content' },
+          intent: { 
+            type: 'string', 
+            enum: ['edit', 'review', 'publish', 'comment', 'any'],
+            description: 'What you plan to do with the results (helps filter appropriately)'
+          },
+          status: { 
+            type: 'string', 
+            enum: ['publish', 'draft', 'private', 'pending', 'future', 'any'],
+            description: 'Filter by post status (default: based on intent)'
+          },
+          page: { type: 'number', description: 'Page number for results (default: 1)' },
+          perPage: { type: 'number', description: 'Number of results per page (default: 10, max: 20)' }
+        }
+      },
+      execute: async (params) => {
+        return this.findPostsForWorkflow(params);
+      }
+    });
   }
   
   createMediaOperations(mediaFeatures) {
@@ -999,6 +1026,200 @@ ${cleanContent}
       metadata,
       postContent: htmlContent, // Now returns HTML, not raw markdown
     };
+  }
+
+  async getCurrentUserContext() {
+    try {
+      // Get current user info
+      const response = await this.wpClient.request('/wp/v2/users/me', {
+        method: 'GET'
+      });
+      
+      const user = response.data;
+      return {
+        id: user.id,
+        name: user.name,
+        canEditOthers: user.capabilities?.edit_others_posts || false,
+        canPublish: user.capabilities?.publish_posts || false,
+        canModerate: user.capabilities?.moderate_comments || false
+      };
+    } catch (error) {
+      // Fallback to basic permissions
+      return {
+        id: 0,
+        name: 'Unknown',
+        canEditOthers: false,
+        canPublish: false,
+        canModerate: false
+      };
+    }
+  }
+
+  async findPostsForWorkflow(params) {
+    try {
+      // Determine intent-based defaults
+      let defaultStatus = params.status || 'any';
+      if (!params.status && params.intent) {
+        switch (params.intent) {
+          case 'edit':
+            defaultStatus = 'draft';
+            break;
+          case 'review':
+            defaultStatus = 'pending';
+            break;
+          case 'publish':
+            defaultStatus = 'draft,pending';
+            break;
+          case 'comment':
+            defaultStatus = 'publish';
+            break;
+        }
+      }
+      
+      // Validate pagination (smaller for workflow context)
+      const perPage = Math.min(Math.max(1, params.perPage || 10), 20);
+      const page = Math.max(1, params.page || 1);
+      
+      // Build search params
+      const searchParams = {
+        page,
+        per_page: perPage,
+        _embed: true // Include embedded data
+      };
+      
+      // Add search query if provided
+      if (params.query) {
+        searchParams.search = params.query;
+        searchParams.orderby = 'relevance';
+      } else {
+        searchParams.orderby = 'modified';
+        searchParams.order = 'desc';
+      }
+      
+      // Add status filter
+      if (defaultStatus !== 'any') {
+        searchParams.status = defaultStatus;
+      } else {
+        searchParams.status = 'publish,draft,private,pending,future';
+      }
+      
+      // Make the API request (listPosts returns array directly)
+      const posts = await this.wpClient.listPosts(searchParams);
+      
+      // Since listPosts doesn't return headers, we'll estimate pagination
+      // This is a limitation we'll need to address later
+      const totalItems = posts.length;
+      const totalPages = Math.ceil(totalItems / perPage);
+      
+      // Format results with workflow suggestions
+      const formattedPosts = posts.map(post => {
+        const baseInfo = {
+          id: post.id,
+          title: post.title.rendered,
+          status: post.status,
+          date: post.date,
+          modified: post.modified,
+          excerpt: post.excerpt.rendered.replace(/<[^>]*>/g, '').trim(),
+          author: post._embedded?.author?.[0]?.name || `User ${post.author}`,
+          categories: post._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [],
+          tags: post._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || []
+        };
+        
+        // Add suggested actions based on status and intent
+        const suggestedActions = this.getSuggestedActions(post.status, params.intent);
+        
+        return {
+          ...baseInfo,
+          suggestedActions
+        };
+      });
+      
+      // Provide workflow guidance
+      const workflowGuidance = this.getWorkflowGuidance(params.intent, formattedPosts.length, totalItems);
+      
+      return {
+        success: true,
+        query: params.query || '',
+        intent: params.intent || 'any',
+        page,
+        perPage,
+        totalItems,
+        totalPages,
+        posts: formattedPosts,
+        workflowGuidance
+      };
+      
+    } catch (error) {
+      if (error.response?.data?.message) {
+        throw new Error(`Search failed: ${error.response.data.message}`);
+      }
+      throw new Error(`Failed to find posts: ${error.message}`);
+    }
+  }
+  
+  getSuggestedActions(status, intent) {
+    const actions = [];
+    
+    // Status-based suggestions with role awareness
+    switch (status) {
+      case 'draft':
+        actions.push('pull-for-editing', 'submit-for-review', 'publish-workflow');
+        break;
+      case 'pending':
+        actions.push('review-content', 'publish-workflow', 'pull-for-editing');
+        break;
+      case 'publish':
+        actions.push('pull-for-editing', 'view-editorial-feedback');
+        break;
+      case 'private':
+        actions.push('pull-for-editing', 'publish-workflow');
+        break;
+      case 'future':
+        actions.push('pull-for-editing', 'publish-workflow');
+        break;
+    }
+    
+    // Intent-based filtering
+    if (intent === 'edit') {
+      return actions.filter(a => a.includes('edit') || a === 'pull-for-editing').slice(0, 2);
+    } else if (intent === 'review') {
+      return actions.filter(a => a.includes('review') || a === 'publish-workflow').slice(0, 2);
+    } else if (intent === 'publish') {
+      return actions.filter(a => a === 'publish-workflow' || a === 'submit-for-review').slice(0, 2);
+    } else if (intent === 'comment') {
+      return ['view-editorial-feedback'];
+    }
+    
+    return actions.slice(0, 3); // Limit to top 3 suggestions
+  }
+  
+  getWorkflowGuidance(intent, resultCount, totalCount) {
+    if (resultCount === 0) {
+      const noResultsHelp = {
+        edit: "No drafts found. Try searching without filters or create a new draft with 'draft-article'.",
+        review: "No pending posts found. Posts must be submitted for review first.",
+        publish: "No posts ready to publish. Check drafts or pending posts.",
+        comment: "No published posts found. Try searching all statuses.",
+        any: "No posts found. Try different search terms or adjust your filters."
+      };
+      return noResultsHelp[intent] || noResultsHelp.any;
+    }
+    
+    const guidance = {
+      edit: "📝 Use 'pull-for-editing' with a post ID to start editing. After editing, use 'sync-to-wordpress' to save changes.",
+      review: "🔍 Found posts awaiting review. Use 'publish-workflow' to approve and publish, or 'pull-for-editing' to make changes.",
+      publish: "🚀 Ready to publish! Use 'publish-workflow' with the post ID. You can publish immediately or schedule for later.",
+      comment: "💬 Use 'view-editorial-feedback' to see comments and feedback on these published posts.",
+      any: "Select a post and use the suggested action. Each post shows relevant next steps based on its status."
+    };
+    
+    let message = guidance[intent] || guidance.any;
+    
+    if (totalCount > resultCount) {
+      message += `\n📊 Showing ${resultCount} of ${totalCount} total results. Use page parameter for more.`;
+    }
+    
+    return message;
   }
 
 }
