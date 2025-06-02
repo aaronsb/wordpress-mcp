@@ -10,6 +10,7 @@ import { homedir } from 'os';
 import { z } from 'zod';
 import { PersonalityManager } from './core/personality-manager.js';
 import { FeatureRegistry } from './core/feature-registry.js';
+import { FeatureMapper } from './core/feature-mapper.js';
 import { WordPressClient } from './core/wordpress-client.js';
 import { ToolInjector } from './core/tool-injector.js';
 
@@ -52,7 +53,11 @@ class WordPressAuthorMCP {
     this.personalityManager = new PersonalityManager();
     await this.personalityManager.loadPersonalities();
 
-    // Initialize feature registry
+    // Initialize Feature API mapper for semantic operations
+    this.featureMapper = new FeatureMapper(this.wpClient);
+    await this.featureMapper.initialize();
+
+    // Initialize feature registry (for backward compatibility)
     this.featureRegistry = new FeatureRegistry(this.wpClient);
     await this.featureRegistry.loadFeatures();
 
@@ -62,9 +67,54 @@ class WordPressAuthorMCP {
       this.featureRegistry
     );
 
-    // Inject tools for the selected personality
-    this.tools = this.toolInjector.getToolsForPersonality(personalityName);
-    console.error(`Loaded ${this.tools.length} tools for ${personalityName} personality`);
+    // Get semantic operations from FeatureMapper
+    const semanticOps = this.featureMapper.getSemanticOperations();
+    const semanticTools = semanticOps.map(op => this.createToolFromOperation(op));
+    
+    // Get personality-based tools (for features not covered by semantic ops)
+    const personalityTools = this.toolInjector.getToolsForPersonality(personalityName);
+    
+    // Combine tools (semantic operations take precedence)
+    this.tools = [...semanticTools, ...personalityTools.filter(t => 
+      !semanticTools.some(st => st.name === t.name)
+    )];
+    
+    console.error(`Loaded ${semanticOps.length} semantic operations and ${personalityTools.length} personality tools`);
+    console.error(`Total: ${this.tools.length} tools for ${personalityName} personality`);
+  }
+
+  createToolFromOperation(operation) {
+    return {
+      name: operation.name.toLowerCase().replace(/\s+/g, '-'),
+      description: operation.description,
+      inputSchema: operation.inputSchema,
+      handler: async (params) => {
+        try {
+          const result = await operation.execute(params);
+          return this.formatResponse(result);
+        } catch (error) {
+          return this.formatError(error);
+        }
+      }
+    };
+  }
+
+  formatResponse(result) {
+    if (typeof result === 'string') {
+      return {
+        content: [{ type: 'text', text: result }],
+      };
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  }
+
+  formatError(error) {
+    return {
+      content: [{ type: 'text', text: `Error: ${error.message}` }],
+      isError: true,
+    };
   }
 
   getPersonality() {
