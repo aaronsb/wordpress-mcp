@@ -76,7 +76,7 @@ flowchart LR
     
     subgraph "WordPress API"
         API1[POST /wp/v2/posts<br/>+ Category lookups<br/>+ Tag creation<br/>+ Status setting]:::api
-        API2[GET /wp/v2/posts/{id}<br/>+ GET categories<br/>+ GET tags<br/>+ PUT /wp/v2/posts/{id}]:::api
+        API2[GET /wp/v2/posts/:id<br/>+ GET categories<br/>+ GET tags<br/>+ PUT /wp/v2/posts/:id]:::api
         API3[GET /wp/v2/comments<br/>+ Filter by post_author<br/>+ Parse editorial notes]:::api
     end
     
