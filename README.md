@@ -63,9 +63,15 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph "Human Intent"
-        HI1[Create article]:::intent
-        HI2[Edit my post]:::intent
-        HI3[Review feedback]:::intent
+        H1[I want to write about MCP servers]:::human
+        H2[Fix that typo in my article]:::human
+        H3[What do people think of my post?]:::human
+    end
+    
+    subgraph "AI Intent"
+        AI1[Create article]:::intent
+        AI2[Edit my post]:::intent
+        AI3[Review feedback]:::intent
     end
     
     subgraph "Semantic Operations"
@@ -80,14 +86,19 @@ flowchart LR
         API3[GET /wp/v2/comments<br/>+ Filter by post_author<br/>+ Parse editorial notes]:::api
     end
     
-    HI1 --> SO1
-    HI2 --> SO2
-    HI3 --> SO3
+    H1 --> AI1
+    H2 --> AI2
+    H3 --> AI3
+    
+    AI1 --> SO1
+    AI2 --> SO2
+    AI3 --> SO3
     
     SO1 --> API1
     SO2 --> API2
     SO3 --> API3
     
+    classDef human fill:#ec4899,stroke:#db2777,color:#ffffff
     classDef intent fill:#10b981,stroke:#059669,color:#ffffff
     classDef semantic fill:#f59e0b,stroke:#d97706,color:#000000
     classDef api fill:#6366f1,stroke:#4f46e5,color:#ffffff
