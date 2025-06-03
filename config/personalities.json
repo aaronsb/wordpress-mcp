@@ -37,7 +37,7 @@
     "name": "Author",
     "description": "Create, publish and manage own content with media capabilities",
     "features": [
-      "search-posts",
+      "find-posts",
       "draft-article",
       "edit-draft",
       "submit-for-review", 

@@ -366,6 +366,66 @@ export class FeatureMapper {
         return this.findPostsForWorkflow(params);
       }
     });
+
+    // View Editorial Feedback - for all content creators
+    this.featureMap.set('view-editorial-feedback', {
+      name: 'View Editorial Feedback',
+      description: 'View editorial comments and feedback on your posts',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: { type: 'number', description: 'Post ID to get feedback for (optional, shows all if not specified)' },
+          status: { 
+            type: 'string', 
+            enum: ['all', 'approved', 'pending', 'spam', 'trash'],
+            description: 'Filter comments by status',
+            default: 'all'
+          }
+        }
+      },
+      execute: async (params) => {
+        return this.viewEditorialFeedback(params);
+      }
+    });
+
+    // Submit for Review - semantic workflow for contributors
+    this.featureMap.set('submit-for-review', {
+      name: 'Submit for Review',
+      description: 'Submit a draft post for editorial review. Use this instead of changing post status manually - it handles the complete review workflow.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: { type: 'number', description: 'ID of the draft post to submit' },
+          note: { type: 'string', description: 'Note to editors (optional)' }
+        },
+        required: ['postId']
+      },
+      execute: async (params) => {
+        return this.submitForReview(params);
+      }
+    });
+
+    // Publish Workflow - semantic publishing for authors/editors
+    this.featureMap.set('publish-workflow', {
+      name: 'Publish Workflow',
+      description: 'Publish a post immediately or schedule for future',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: { type: 'number', description: 'ID of the post to publish' },
+          action: { 
+            type: 'string', 
+            enum: ['publish_now', 'schedule', 'private'],
+            description: 'Publishing action'
+          },
+          schedule_date: { type: 'string', description: 'ISO 8601 date for scheduling (required if action is "schedule")' }
+        },
+        required: ['postId', 'action']
+      },
+      execute: async (params) => {
+        return this.publishWorkflow(params);
+      }
+    });
   }
   
   createMediaOperations(mediaFeatures) {
@@ -1220,6 +1280,201 @@ ${cleanContent}
     }
     
     return message;
+  }
+
+  async viewEditorialFeedback(params) {
+    try {
+      // Build query to get comments on user's posts or specific post
+      const query = {
+        per_page: 50,
+        orderby: 'date',
+        order: 'desc'
+      };
+      
+      // Filter by post if specified
+      if (params.postId) {
+        query.post = params.postId;
+      } else {
+        // Get current user's posts first to filter comments
+        const currentUser = await this.getCurrentUserContext();
+        const userPosts = await this.wpClient.listPosts({ 
+          author: currentUser.id,
+          per_page: 100,
+          status: 'any'
+        });
+        
+        if (userPosts.length === 0) {
+          return {
+            success: true,
+            comments: [],
+            message: 'No posts found for current user'
+          };
+        }
+        
+        // Get comments on user's posts
+        const postIds = userPosts.map(p => p.id);
+        query.post = postIds.join(',');
+      }
+      
+      // Add status filter
+      if (params.status && params.status !== 'all') {
+        query.status = params.status;
+      }
+      
+      // Get comments
+      const comments = await this.wpClient.request('/wp/v2/comments', {
+        method: 'GET',
+        params: query
+      });
+      
+      // Format comments with context
+      const formattedComments = comments.data.map(comment => ({
+        id: comment.id,
+        postId: comment.post,
+        postTitle: comment._embedded?.up?.[0]?.title?.rendered || 'Unknown Post',
+        author: comment.author_name,
+        date: comment.date,
+        status: comment.status,
+        content: comment.content.rendered.replace(/<[^>]*>/g, '').trim(),
+        isEditorial: comment.author > 0, // Registered users are likely editorial
+        link: comment.link
+      }));
+      
+      // Group by post for better context
+      const groupedByPost = {};
+      formattedComments.forEach(comment => {
+        if (!groupedByPost[comment.postId]) {
+          groupedByPost[comment.postId] = {
+            postTitle: comment.postTitle,
+            comments: []
+          };
+        }
+        groupedByPost[comment.postId].comments.push(comment);
+      });
+      
+      return {
+        success: true,
+        totalComments: formattedComments.length,
+        posts: Object.keys(groupedByPost).length,
+        feedback: groupedByPost,
+        message: formattedComments.length > 0 
+          ? `Found ${formattedComments.length} comments on ${Object.keys(groupedByPost).length} posts`
+          : 'No editorial feedback found'
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to get editorial feedback: ${error.message}`);
+    }
+  }
+
+  async submitForReview(params) {
+    try {
+      // Get the post first to verify it's a draft
+      const post = await this.wpClient.getPost(params.postId);
+      
+      if (post.status !== 'draft') {
+        throw new Error(`Post ${params.postId} is not a draft (status: ${post.status})`);
+      }
+      
+      // Update post status to pending
+      const updatedPost = await this.wpClient.updatePost(params.postId, {
+        status: 'pending'
+      });
+      
+      // Add editorial note if provided
+      if (params.note) {
+        try {
+          await this.wpClient.request('/wp/v2/comments', {
+            method: 'POST',
+            body: JSON.stringify({
+              post: params.postId,
+              content: `**Editorial Note:** ${params.note}`,
+              status: 'hold' // Hold for moderation
+            })
+          });
+        } catch (error) {
+          console.warn('Could not add editorial note:', error.message);
+        }
+      }
+      
+      return {
+        success: true,
+        postId: params.postId,
+        title: updatedPost.title.rendered,
+        status: updatedPost.status,
+        message: `Post submitted for review: "${updatedPost.title.rendered}"`,
+        note: params.note ? 'Editorial note added' : undefined
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to submit for review: ${error.message}`);
+    }
+  }
+
+  async publishWorkflow(params) {
+    try {
+      // Get the post to verify current status
+      const post = await this.wpClient.getPost(params.postId);
+      
+      // Prepare update data based on action
+      const updateData = {};
+      
+      switch (params.action) {
+        case 'publish_now':
+          updateData.status = 'publish';
+          break;
+          
+        case 'schedule':
+          if (!params.schedule_date) {
+            throw new Error('Schedule date is required for scheduled publishing');
+          }
+          // Validate date is in the future
+          const scheduleDate = new Date(params.schedule_date);
+          if (scheduleDate <= new Date()) {
+            throw new Error('Schedule date must be in the future');
+          }
+          updateData.status = 'future';
+          updateData.date = params.schedule_date;
+          break;
+          
+        case 'private':
+          updateData.status = 'private';
+          break;
+          
+        default:
+          throw new Error(`Unknown publishing action: ${params.action}`);
+      }
+      
+      // Update the post
+      const updatedPost = await this.wpClient.updatePost(params.postId, updateData);
+      
+      // Build response message
+      let message = '';
+      switch (params.action) {
+        case 'publish_now':
+          message = `Published: "${updatedPost.title.rendered}"`;
+          break;
+        case 'schedule':
+          message = `Scheduled for ${new Date(params.schedule_date).toLocaleString()}: "${updatedPost.title.rendered}"`;
+          break;
+        case 'private':
+          message = `Published privately: "${updatedPost.title.rendered}"`;
+          break;
+      }
+      
+      return {
+        success: true,
+        postId: params.postId,
+        title: updatedPost.title.rendered,
+        status: updatedPost.status,
+        link: updatedPost.link,
+        publishDate: updatedPost.date,
+        message
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to publish: ${error.message}`);
+    }
   }
 
 }
