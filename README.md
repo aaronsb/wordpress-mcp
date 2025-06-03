@@ -360,24 +360,56 @@ Once configured, the WordPress tools will be available in Claude. You can:
 
 - Create and edit draft posts
 - Publish articles with scheduling options
-- **Pull posts for local editing with temp files**
-- **Edit content locally using window/search/replace patterns**
+- **Search posts using natural language**
+- **Pull posts for editing with document sessions**
+- **Edit content using line-based operations**
 - **Sync changes back in single API call**
 - Manage media files
 - Perform bulk operations (admin only)
-- Search and filter all content (admin only)
 
-### Content Editing Workflows
+### Content Discovery & Editing Workflows
 
-**Traditional Direct Editing:**
-- "Create a draft blog post about AI development"
-- "Publish my draft with ID 30"
-- "Schedule a post for next Monday at 9 AM"
+**Semantic Search Examples:**
+- "Find my article about potatoes published yesterday"
+- "Search for drafts mentioning MCP servers"
+- "Show me posts about AI that need editing"
+- "Find published articles with comments to review"
 
-**Advanced Document Session Workflow (Recommended for complex edits):**
-- "Pull post 42 for editing" → Creates editing session with document handle
-- Use flexible editing tools to iterate locally
-- "Sync the session back to WordPress" → Single update with formatted HTML
+**Natural Language Workflows:**
+- "Find my article about potatoes and update the cooking section" 
+  → AI uses `find-posts` → suggests `pull-for-editing` → guides you through edits
+- "Review feedback on my WordPress tutorial"
+  → AI searches published posts → uses `view-editorial-feedback`
+- "Edit my latest draft about semantic APIs"
+  → AI finds recent drafts → pulls for editing → helps with changes
+
+**Direct ID-Based Operations (when you know the ID):**
+- "Pull post 42 for editing"
+- "Publish draft with ID 30"
+- "Schedule post 55 for next Monday at 9 AM"
+
+### Intelligent Search with Intent
+
+The `find-posts` operation understands what you want to do:
+
+**Intent-based filtering:**
+- `intent: "edit"` → Prioritizes drafts you can modify
+- `intent: "review"` → Shows pending posts awaiting approval  
+- `intent: "publish"` → Finds drafts ready to go live
+- `intent: "comment"` → Shows published posts with feedback
+
+**Workflow guidance:**
+Each search result includes:
+- Suggested next actions based on post status
+- Clear instructions for the next step
+- Role-appropriate tool recommendations
+
+Example:
+```
+"Find posts about baking I can edit"
+→ Returns drafts with suggested actions: ["pull-for-editing", "submit-for-review"]
+→ Guidance: "📝 Use 'pull-for-editing' with a post ID to start editing..."
+```
 
 ### Document Editing Features
 
