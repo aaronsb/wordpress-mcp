@@ -1091,11 +1091,8 @@ ${cleanContent}
   async getCurrentUserContext() {
     try {
       // Get current user info
-      const response = await this.wpClient.request('/wp/v2/users/me', {
-        method: 'GET'
-      });
+      const user = await this.wpClient.request('/users/me');
       
-      const user = response.data;
       return {
         id: user.id,
         name: user.name,
@@ -1159,9 +1156,8 @@ ${cleanContent}
       // Add status filter
       if (defaultStatus !== 'any') {
         searchParams.status = defaultStatus;
-      } else {
-        searchParams.status = 'publish,draft,private,pending,future';
       }
+      // For 'any', don't add status filter - WordPress will return based on user permissions
       
       // Make the API request (listPosts returns array directly)
       const posts = await this.wpClient.listPosts(searchParams);
@@ -1321,14 +1317,12 @@ ${cleanContent}
         query.status = params.status;
       }
       
-      // Get comments
-      const comments = await this.wpClient.request('/wp/v2/comments', {
-        method: 'GET',
-        params: query
-      });
+      // Get comments - build URL with query params
+      const queryString = new URLSearchParams(query).toString();
+      const comments = await this.wpClient.request(`/comments?${queryString}`);
       
       // Format comments with context
-      const formattedComments = comments.data.map(comment => ({
+      const formattedComments = (comments || []).map(comment => ({
         id: comment.id,
         postId: comment.post,
         postTitle: comment._embedded?.up?.[0]?.title?.rendered || 'Unknown Post',
@@ -1384,7 +1378,7 @@ ${cleanContent}
       // Add editorial note if provided
       if (params.note) {
         try {
-          await this.wpClient.request('/wp/v2/comments', {
+          await this.wpClient.request('/comments', {
             method: 'POST',
             body: JSON.stringify({
               post: params.postId,
