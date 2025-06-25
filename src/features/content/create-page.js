@@ -1,13 +1,16 @@
 /**
  * Create Page Feature
  * 
- * Creates static pages (not blog posts) - for building site structure
+ * Creates static pages with WordPress blocks (not blog posts) - for building site structure
  * Pages are hierarchical and typically used for permanent content like About, Contact, Services, etc.
  */
 
+import { BlockConverter } from '../../core/block-converter.js';
+import blocksConfig from '../../../config/blocks.json' assert { type: 'json' };
+
 export default {
   name: 'create-page',
-  description: 'Create a static page for permanent content (not a blog post). Pages are hierarchical and used for site structure like About, Contact, or Service pages.',
+  description: 'Create a static page using WordPress blocks for permanent content (not a blog post). Pages are hierarchical and used for site structure like About, Contact, or Service pages.',
 
   inputSchema: {
     type: 'object',
@@ -18,7 +21,7 @@ export default {
       },
       content: {
         type: 'string',
-        description: 'Page content (HTML or plain text)',
+        description: 'Page content (Markdown format preferred)',
       },
       status: {
         type: 'string',
@@ -43,18 +46,35 @@ export default {
         type: 'number',
         description: 'Featured image ID (optional)',
       },
+      useClassicEditor: {
+        type: 'boolean',
+        description: 'Force classic editor format instead of blocks (default: false)',
+        default: false,
+      },
     },
     required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
+    const blockConverter = new BlockConverter();
 
     try {
+      let contentHtml = params.content;
+
+      // Convert to blocks unless explicitly requested otherwise
+      if (blocksConfig.blocks.enabled && !params.useClassicEditor) {
+        // Check if content is already in block format
+        if (!params.content.includes('<!-- wp:')) {
+          // Assume markdown input and convert to blocks
+          contentHtml = blockConverter.markdownToBlocks(params.content);
+        }
+      }
+
       // Prepare page data
       const pageData = {
         title: typeof params.title === 'string' ? { raw: params.title } : params.title,
-        content: typeof params.content === 'string' ? { raw: params.content } : params.content,
+        content: { raw: contentHtml },
         status: params.status || 'draft',
         parent: params.parent || 0,
         menu_order: params.menu_order || 0,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { config } from 'dotenv';
-import { WordPressClient } from './src/core/wordpress-client.js';
-import { FeatureMapper } from './src/core/feature-mapper.js';
+import { WordPressClient } from '../../src/core/wordpress-client.js';
+import { FeatureMapper } from '../../src/core/feature-mapper.js';
 
 // Load environment
 config();

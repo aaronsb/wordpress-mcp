@@ -6,23 +6,84 @@
  */
 
 export class ToolInjector {
-  constructor(personalityConfig, featureRegistry) {
+  constructor(personalityConfig, featureRegistry, server) {
     this.personalityConfig = personalityConfig;
     this.featureRegistry = featureRegistry;
+    this.server = server;
   }
 
   /**
-   * Get tools for a specific personality based on the mapping
+   * Get semantic tools with filtered actions for a specific personality
    */
-  getToolsForPersonality(personalityName) {
+  getToolsForPersonality(personalityName, semanticGroups) {
     const personality = this.personalityConfig[personalityName];
     if (!personality) {
       console.error(`Unknown personality: ${personalityName}`);
       return [];
     }
 
-    // Simply map feature names to actual tool definitions
+    // If using legacy features array, fall back to old behavior
+    if (personality.features) {
+      return this.getLegacyToolsForPersonality(personalityName);
+    }
+
+    // New semantic tools with filtered actions
     const tools = [];
+    
+    for (const [toolName, allowedActions] of Object.entries(personality.tools)) {
+      // Skip tools with no allowed actions
+      if (!allowedActions || allowedActions.length === 0) {
+        continue;
+      }
+
+      // Get the base semantic tool
+      const semanticGroup = semanticGroups[toolName];
+      if (!semanticGroup || !semanticGroup.operations || semanticGroup.operations.length === 0) {
+        console.warn(`Semantic tool '${toolName}' not found for personality '${personalityName}'`);
+        continue;
+      }
+
+      // Get the first operation (there should only be one per semantic group now)
+      const baseTool = semanticGroup.operations[0];
+      
+      // Filter the action enum in the schema to only allowed actions
+      const filteredTool = this.filterToolActions(baseTool, allowedActions, personalityName);
+      tools.push(this.prepareToolForMCP(filteredTool));
+    }
+
+    return tools;
+  }
+
+  /**
+   * Filter allowed actions for a semantic tool based on personality
+   */
+  filterToolActions(baseTool, allowedActions, personalityName) {
+    const filteredTool = { ...baseTool };
+    
+    // Clone the input schema
+    filteredTool.inputSchema = JSON.parse(JSON.stringify(baseTool.inputSchema));
+    
+    // Filter the action enum to only allowed actions
+    if (filteredTool.inputSchema.properties && filteredTool.inputSchema.properties.action) {
+      const originalActions = filteredTool.inputSchema.properties.action.enum || [];
+      const filteredActions = originalActions.filter(action => allowedActions.includes(action));
+      
+      filteredTool.inputSchema.properties.action.enum = filteredActions;
+      
+      // Update description to indicate role-based filtering
+      filteredTool.description = `[${personalityName.toUpperCase()}] ${filteredTool.description}`;
+    }
+
+    return filteredTool;
+  }
+
+  /**
+   * Legacy support for personalities using features array
+   */
+  getLegacyToolsForPersonality(personalityName) {
+    const personality = this.personalityConfig[personalityName];
+    const tools = [];
+    
     for (const featureName of personality.features) {
       const feature = this.featureRegistry.getFeature(featureName);
       if (feature) {
@@ -50,7 +111,9 @@ export class ToolInjector {
       handler: async (params) => {
         try {
           const result = await feature.execute(params, {
-            wpClient: this.featureRegistry.wpClient,
+            wpClient: this.server.wpClient,
+            server: this.server,
+            documentSessionManager: this.server.documentSessionManager,
           });
 
           // Handle WordPress permission errors gracefully

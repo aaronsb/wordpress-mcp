@@ -1,13 +1,16 @@
 /**
  * Draft Page Feature
  * 
- * Creates a draft page for review before publishing
+ * Creates a draft page with WordPress blocks for review before publishing
  * Pages are static content that form site structure, unlike time-based blog posts
  */
 
+import { BlockConverter } from '../../core/block-converter.js';
+import blocksConfig from '../../../config/blocks.json' assert { type: 'json' };
+
 export default {
   name: 'draft-page',
-  description: 'Create a draft page for static content. Pages are used for permanent site content like About, Services, or Contact pages - not for blog posts or news articles.',
+  description: 'Create a draft page using WordPress blocks for static content. Pages are used for permanent site content like About, Services, or Contact pages - not for blog posts or news articles.',
 
   inputSchema: {
     type: 'object',
@@ -18,7 +21,7 @@ export default {
       },
       content: {
         type: 'string',
-        description: 'Page content (HTML or plain text) - typically evergreen content',
+        description: 'Page content (Markdown format preferred) - typically evergreen content',
       },
       parent: {
         type: 'number',
@@ -33,18 +36,35 @@ export default {
         type: 'string',
         description: 'Custom page template to use (optional, e.g., "full-width", "landing-page")',
       },
+      useClassicEditor: {
+        type: 'boolean',
+        description: 'Force classic editor format instead of blocks (default: false)',
+        default: false,
+      },
     },
     required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
+    const blockConverter = new BlockConverter();
 
     try {
+      let contentHtml = params.content;
+
+      // Convert to blocks unless explicitly requested otherwise
+      if (blocksConfig.blocks.enabled && !params.useClassicEditor) {
+        // Check if content is already in block format
+        if (!params.content.includes('<!-- wp:')) {
+          // Assume markdown input and convert to blocks
+          contentHtml = blockConverter.markdownToBlocks(params.content);
+        }
+      }
+
       // Prepare page data - always draft status for this feature
       const pageData = {
         title: { raw: params.title },
-        content: { raw: params.content },
+        content: { raw: contentHtml },
         status: 'draft',
         parent: params.parent || 0,
         menu_order: params.menu_order || 0,

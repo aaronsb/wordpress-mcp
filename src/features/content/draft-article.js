@@ -1,12 +1,15 @@
 /**
  * Draft Article Feature
  *
- * Creates a draft article - available to all personalities
+ * Creates a draft article with WordPress blocks - available to all personalities
  */
+
+import { BlockConverter } from '../../core/block-converter.js';
+import blocksConfig from '../../../config/blocks.json' assert { type: 'json' };
 
 export default {
   name: 'draft-article',
-  description: 'Create a draft article that can be reviewed before publishing',
+  description: 'Create a draft article using WordPress blocks that can be reviewed before publishing',
 
   inputSchema: {
     type: 'object',
@@ -17,7 +20,7 @@ export default {
       },
       content: {
         type: 'string',
-        description: 'Article content (HTML or plain text)',
+        description: 'Article content (Markdown format preferred)',
       },
       excerpt: {
         type: 'string',
@@ -33,18 +36,35 @@ export default {
         items: { type: 'string' },
         description: 'Tag names (optional)',
       },
+      useClassicEditor: {
+        type: 'boolean',
+        description: 'Force classic editor format instead of blocks (default: false)',
+        default: false,
+      },
     },
     required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
+    const blockConverter = new BlockConverter();
 
     try {
+      let contentHtml = params.content;
+
+      // Convert to blocks unless explicitly requested otherwise
+      if (blocksConfig.blocks.enabled && !params.useClassicEditor) {
+        // Check if content is already in block format
+        if (!params.content.includes('<!-- wp:')) {
+          // Assume markdown input and convert to blocks
+          contentHtml = blockConverter.markdownToBlocks(params.content);
+        }
+      }
+
       // Prepare post data for Feature API
       const postData = {
         title: { raw: params.title },
-        content: { raw: params.content },
+        content: { raw: contentHtml },
         status: 'draft', // Always draft for this feature
         excerpt: { raw: params.excerpt || '' },
       };

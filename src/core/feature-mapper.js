@@ -7,6 +7,8 @@
  */
 
 import { DocumentSessionManager } from './document-session-manager.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export class FeatureMapper {
   constructor(wpClient) {
@@ -16,31 +18,20 @@ export class FeatureMapper {
   }
 
   async initialize() {
-    // Discover available WordPress features
-    const wpFeatures = await this.wpClient.discoverFeatures();
+    // Initialize semantic operations directly
+    // We don't need to discover WordPress features - we define our own semantic layer
+    this.mapSemanticOperations();
     
-    // Group them into semantic operations
-    this.mapSemanticOperations(wpFeatures);
-    
-    console.error(`Mapped ${wpFeatures.length} WordPress features into ${this.featureMap.size} semantic operations`);
+    console.error(`Initialized ${this.featureMap.size} semantic operations`);
   }
 
-  mapSemanticOperations(wpFeatures) {
-    // Create a map of feature types for easy lookup
-    const featuresByType = this.groupFeaturesByType(wpFeatures);
-    
-    // Map semantic operations based on available features
-    if (featuresByType.posts) {
-      this.createPostOperations(featuresByType.posts);
-    }
-    
-    if (featuresByType.media) {
-      this.createMediaOperations(featuresByType.media);
-    }
-    
-    if (featuresByType.users) {
-      this.createUserOperations(featuresByType.users);
-    }
+  mapSemanticOperations() {
+    // Create the 5 unified semantic tools with action-based routing
+    this.createContentManagementTool();
+    this.createBlockEditorTool();
+    this.createPublishingWorkflowTool();
+    this.createMediaManagementTool();
+    this.createSiteAdministrationTool();
   }
 
   groupFeaturesByType(features) {
@@ -64,474 +55,697 @@ export class FeatureMapper {
     return grouped;
   }
 
-  createPostOperations(postFeatures) {
-    // Draft Article - combines post creation with proper status
-    if (postFeatures.create) {
-      this.featureMap.set('draft-article', {
-        name: 'Draft Article',
-        description: 'Create a draft article with categories and tags',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Article title' },
-            content: { type: 'string', description: 'Article content' },
-            excerpt: { type: 'string', description: 'Brief summary' },
-            categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
-          },
-          required: ['title', 'content'],
-        },
-        execute: async (params) => {
-          return this.createDraftArticle(params);
-        }
-      });
-    }
-
-    // Publish Article - creates and publishes in one go
-    if (postFeatures.create) {
-      this.featureMap.set('publish-article', {
-        name: 'Publish Article',
-        description: 'Create and publish an article immediately with all metadata',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Article title' },
-            content: { type: 'string', description: 'Article content' },
-            excerpt: { type: 'string', description: 'Brief summary' },
-            featuredImageUrl: { type: 'string', description: 'URL of featured image to upload' },
-            categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
-          },
-          required: ['title', 'content'],
-        },
-        execute: async (params) => {
-          return this.publishArticle(params);
-        }
-      });
-    }
-
-    // Edit Draft - semantic editing of existing drafts
-    this.featureMap.set('edit-draft', {
-      name: 'Edit Draft',
-      description: 'Edit an existing draft post with content and metadata',
+  createContentManagementTool() {
+    this.featureMap.set('content-management', {
+      name: 'content-management',
+      description: '[Content Management] Create, edit, and manage posts and pages',
       inputSchema: {
         type: 'object',
         properties: {
-          postId: { type: 'number', description: 'ID of the draft to edit' },
-          title: { type: 'string', description: 'New title (optional)' },
-          content: { type: 'string', description: 'New content (optional)' },
-          excerpt: { type: 'string', description: 'New excerpt (optional)' },
+          action: {
+            type: 'string',
+            enum: ['draft', 'publish', 'edit', 'pull', 'sync', 'trash', 'page', 'markdown-to-wp', 'bulk'],
+            description: 'Content management action to perform'
+          },
+          // Common properties
+          postId: { type: 'number', description: 'Post/page ID (for edit, pull, sync, trash)' },
+          title: { type: 'string', description: 'Title' },
+          content: { type: 'string', description: 'Content' },
+          excerpt: { type: 'string', description: 'Brief summary' },
           categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
           tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
-        },
-        required: ['postId'],
-      },
-      execute: async (params) => {
-        return this.editDraft(params);
-      }
-    });
-
-    // Pull for Editing - fetch post or page into editing session (filesystem abstracted)
-    this.featureMap.set('pull-for-editing', {
-      name: 'Pull for Editing',
-      description: 'Fetch a WordPress post or page into an editing session',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'number', description: 'ID of the post or page to pull for editing' },
-          type: { 
-            type: 'string', 
-            enum: ['post', 'page'], 
-            default: 'post',
-            description: 'Type of content to pull (post or page)' 
+          // Page-specific
+          type: { type: 'string', enum: ['post', 'page'], description: 'Content type' },
+          parent: { type: 'number', description: 'Parent page ID' },
+          // Pull/sync specific
+          documentHandle: { type: 'string', description: 'Document handle for sync' },
+          closeSession: { type: 'boolean', description: 'Close session after sync' },
+          // Publish options
+          featuredImageUrl: { type: 'string', description: 'Featured image URL' },
+          status: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'Publish status' },
+          // Markdown import specific
+          filePath: { 
+            oneOf: [
+              { type: 'string', description: 'Single file/directory path' },
+              { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Array of file/directory paths' }
+            ], 
+            description: 'Path(s) to markdown files or directories (for markdown-to-wp action)' 
           },
+          recurse: { type: 'boolean', description: 'Recursively process subdirectories (only valid for directories with type="page")' },
+          // Bulk operations specific
+          operation: { type: 'string', enum: ['trash', 'delete', 'change_status'], description: 'Bulk operation type (for bulk action)' },
+          contentIds: { type: 'array', items: { type: 'number' }, description: 'Array of content IDs to operate on (for bulk action)' },
+          newStatus: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'New status for change_status operation' }
         },
-        required: ['postId'],
+        required: ['action']
       },
-      execute: async (params) => {
-        return this.pullForEditing(params);
-      }
-    });
-
-    // Sync to WordPress - push editing session changes back to WordPress
-    this.featureMap.set('sync-to-wordpress', {
-      name: 'Sync to WordPress',
-      description: 'Push editing session changes back to WordPress',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          closeSession: { type: 'boolean', description: 'Close editing session after sync', default: true },
-        },
-        required: ['documentHandle'],
-      },
-      execute: async (params) => {
-        return this.syncToWordPress(params);
-      }
-    });
-
-    // Edit Document - edit document by handle using string replacement
-    this.featureMap.set('edit-document', {
-      name: 'Edit Document',
-      description: 'Edit a document by replacing exact string matches',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          oldString: { type: 'string', description: 'Exact string to find and replace' },
-          newString: { type: 'string', description: 'String to replace with' },
-          expectedReplacements: { type: 'number', description: 'Expected number of replacements', default: 1 },
-        },
-        required: ['documentHandle', 'oldString', 'newString'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.editDocument(
-          params.documentHandle, 
-          params.oldString, 
-          params.newString, 
-          params.expectedReplacements
-        );
-      }
-    });
-
-    // Read Document - read document contents with line numbers
-    this.featureMap.set('read-document', {
-      name: 'Read Document',
-      description: 'Read a document with line numbers for editing',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          offset: { type: 'number', description: 'Starting line number', default: 1 },
-          limit: { type: 'number', description: 'Number of lines to read', default: 50 },
-        },
-        required: ['documentHandle'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.readDocument(
-          params.documentHandle, 
-          params.offset, 
-          params.limit
-        );
-      }
-    });
-
-    // Edit Document Line - line-based editing for better reliability
-    this.featureMap.set('edit-document-line', {
-      name: 'Edit Document Line',
-      description: 'Replace an entire line in the document by line number',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          lineNumber: { type: 'number', description: 'Line number to replace (1-based)' },
-          newLine: { type: 'string', description: 'New content for the line' },
-        },
-        required: ['documentHandle', 'lineNumber', 'newLine'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.editDocumentLine(
-          params.documentHandle,
-          params.lineNumber,
-          params.newLine
-        );
-      }
-    });
-
-    // Insert at Line - add content at specific position
-    this.featureMap.set('insert-at-line', {
-      name: 'Insert at Line',
-      description: 'Insert content before a specific line number',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          lineNumber: { type: 'number', description: 'Line number to insert before (1-based)' },
-          content: { type: 'string', description: 'Content to insert' },
-        },
-        required: ['documentHandle', 'lineNumber', 'content'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.insertAtLine(
-          params.documentHandle,
-          params.lineNumber,
-          params.content
-        );
-      }
-    });
-
-    // Replace Lines - replace a range of lines
-    this.featureMap.set('replace-lines', {
-      name: 'Replace Lines',
-      description: 'Replace a range of lines with new content',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          startLine: { type: 'number', description: 'First line to replace (1-based)' },
-          endLine: { type: 'number', description: 'Last line to replace (inclusive)' },
-          newContent: { type: 'string', description: 'New content to replace the lines with' },
-        },
-        required: ['documentHandle', 'startLine', 'endLine', 'newContent'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.replaceLines(
-          params.documentHandle,
-          params.startLine,
-          params.endLine,
-          params.newContent
-        );
-      }
-    });
-
-    // Search Replace - flexible search and replace with context
-    this.featureMap.set('search-replace', {
-      name: 'Search Replace',
-      description: 'Search and replace text with optional line context',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
-          searchTerm: { type: 'string', description: 'Text to search for' },
-          replacement: { type: 'string', description: 'Text to replace with' },
-          nearLine: { type: 'number', description: 'Optional: only search within 5 lines of this line number' },
-          maxReplacements: { type: 'number', description: 'Maximum replacements to make', default: 1 },
-        },
-        required: ['documentHandle', 'searchTerm', 'replacement'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.searchReplace(
-          params.documentHandle,
-          params.searchTerm,
-          params.replacement,
-          {
-            nearLine: params.nearLine,
-            maxReplacements: params.maxReplacements
-          }
-        );
-      }
-    });
-
-    // List Active Sessions - show active editing sessions (for management)
-    this.featureMap.set('list-editing-sessions', {
-      name: 'List Editing Sessions',
-      description: 'List active editing sessions for management and cleanup',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-      execute: async (params) => {
-        const sessions = this.sessionManager.getActiveSessions();
-        return {
-          success: true,
-          sessions: sessions,
-          message: `Found ${sessions.length} active editing session(s)`,
-        };
-      }
-    });
-
-    // Close Editing Session - manually close an editing session
-    this.featureMap.set('close-editing-session', {
-      name: 'Close Editing Session',
-      description: 'Close an editing session and clean up resources',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          documentHandle: { type: 'string', description: 'Document handle to close' },
-        },
-        required: ['documentHandle'],
-      },
-      execute: async (params) => {
-        return this.sessionManager.closeSession(params.documentHandle);
-      }
-    });
-
-    // Find Posts for Workflow - semantic search that guides to next action
-    this.featureMap.set('find-posts', {
-      name: 'Find Posts',
-      description: 'Search for posts to work with - results include suggested next actions based on your role',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Search terms to find in titles or content' },
-          intent: { 
-            type: 'string', 
-            enum: ['edit', 'review', 'publish', 'comment', 'any'],
-            description: 'What you plan to do with the results (helps filter appropriately)'
-          },
-          status: { 
-            type: 'string', 
-            enum: ['publish', 'draft', 'private', 'pending', 'future', 'any'],
-            description: 'Filter by post status (default: based on intent)'
-          },
-          page: { type: 'number', description: 'Page number for results (default: 1)' },
-          perPage: { type: 'number', description: 'Number of results per page (default: 10, max: 20)' }
-        }
-      },
-      execute: async (params) => {
-        return this.findPostsForWorkflow(params);
-      }
-    });
-
-    // View Editorial Feedback - for all content creators
-    this.featureMap.set('view-editorial-feedback', {
-      name: 'View Editorial Feedback',
-      description: 'View editorial comments and feedback on your posts',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'number', description: 'Post ID to get feedback for (optional, shows all if not specified)' },
-          status: { 
-            type: 'string', 
-            enum: ['all', 'approved', 'pending', 'spam', 'trash'],
-            description: 'Filter comments by status',
-            default: 'all'
-          }
-        }
-      },
-      execute: async (params) => {
-        return this.viewEditorialFeedback(params);
-      }
-    });
-
-    // Submit for Review - semantic workflow for contributors
-    this.featureMap.set('submit-for-review', {
-      name: 'Submit for Review',
-      description: 'Submit a draft post for editorial review. Use this instead of changing post status manually - it handles the complete review workflow.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'number', description: 'ID of the draft post to submit' },
-          note: { type: 'string', description: 'Note to editors (optional)' }
-        },
-        required: ['postId']
-      },
-      execute: async (params) => {
-        return this.submitForReview(params);
-      }
-    });
-
-    // Publish Workflow - semantic publishing for authors/editors
-    this.featureMap.set('publish-workflow', {
-      name: 'Publish Workflow',
-      description: 'Publish a post immediately or schedule for future',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          postId: { type: 'number', description: 'ID of the post to publish' },
-          action: { 
-            type: 'string', 
-            enum: ['publish_now', 'schedule', 'private'],
-            description: 'Publishing action'
-          },
-          schedule_date: { type: 'string', description: 'ISO 8601 date for scheduling (required if action is "schedule")' }
-        },
-        required: ['postId', 'action']
-      },
-      execute: async (params) => {
-        return this.publishWorkflow(params);
+      execute: async (params, context) => {
+        return this.executeContentAction(params, context);
       }
     });
   }
-  
-  createMediaOperations(mediaFeatures) {
-    // Upload Media with Article Context - for authors
-    this.featureMap.set('upload-featured-image', {
-      name: 'Upload Featured Image',
-      description: 'Upload an image from URL to use as featured image',
+
+  createBlockEditorTool() {
+    this.featureMap.set('block-editor', {
+      name: 'block-editor',
+      description: '[Block Editor] Edit content using WordPress blocks',
       inputSchema: {
         type: 'object',
         properties: {
+          action: {
+            type: 'string',
+            enum: [
+              'list', 'read', 'edit', 'insert', 'delete', 'reorder', 'validate',
+              // Semantic content actions
+              'add-section', 'add-subsection', 'add-paragraph', 'add-list', 'add-quote', 
+              'add-code', 'add-separator', 'continue-writing'
+            ],
+            description: 'Block editing action to perform'
+          },
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          blockId: { type: 'string', description: 'Block ID' },
+          type: { type: 'string', description: 'Block type (for insert)' },
+          content: { type: 'string', description: 'Block content' },
+          position: { type: 'number', description: 'Position for insert/reorder' },
+          newPosition: { type: 'number', description: 'New position for reorder' },
+          attributes: { type: 'object', description: 'Block attributes' },
+          filter: { type: 'object', description: 'Filters for list action' },
+          blocks: { type: 'array', description: 'Specific blocks to validate' },
+          validateImmediately: { type: 'boolean', default: true }
+        },
+        required: ['action', 'documentHandle']
+      },
+      execute: async (params, context) => {
+        return this.executeBlockAction(params, context);
+      }
+    });
+  }
+
+  createPublishingWorkflowTool() {
+    this.featureMap.set('publishing-workflow', {
+      name: 'publishing-workflow',
+      description: '[Publishing Workflow] Review, approve, and publish content',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['find', 'submit', 'publish', 'feedback'],
+            description: 'Workflow action to perform'
+          },
+          query: { type: 'string', description: 'Search terms' },
+          intent: { type: 'string', enum: ['edit', 'review', 'publish', 'comment', 'any'] },
+          status: { type: 'string', enum: ['publish', 'draft', 'private', 'pending', 'future', 'any'] },
+          contentType: { type: 'string', enum: ['post', 'page', 'any'], description: 'Type of content to search (default: any)' },
+          page: { type: 'number', description: 'Page number' },
+          perPage: { type: 'number', description: 'Results per page' },
+          postId: { type: 'number', description: 'Post ID' },
+          note: { type: 'string', description: 'Editorial note' },
+          publishAction: { type: 'string', enum: ['publish_now', 'schedule', 'private'] },
+          schedule_date: { type: 'string', description: 'ISO 8601 date for scheduling' }
+        },
+        required: ['action']
+      },
+      execute: async (params, context) => {
+        return this.executeWorkflowAction(params, context);
+      }
+    });
+  }
+
+  createMediaManagementTool() {
+    this.featureMap.set('media-management', {
+      name: 'media-management',
+      description: '[Media Management] Upload and manage media files',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['upload', 'manage'],
+            description: 'Media action to perform'
+          },
           imageUrl: { type: 'string', description: 'URL of image to upload' },
-          title: { type: 'string', description: 'Title for the image' },
+          title: { type: 'string', description: 'Media title' },
           altText: { type: 'string', description: 'Alt text for accessibility' },
-        },
-        required: ['imageUrl'],
-      },
-      execute: async (params) => {
-        return this.uploadImageFromUrl(params);
-      }
-    });
-
-    // Manage Media Library - for authors
-    this.featureMap.set('manage-media', {
-      name: 'Manage Media',
-      description: 'List and search media items in library',
-      inputSchema: {
-        type: 'object',
-        properties: {
           search: { type: 'string', description: 'Search term for media' },
-          mediaType: { type: 'string', enum: ['image', 'video', 'audio', 'document'], description: 'Filter by media type' },
-          perPage: { type: 'number', description: 'Number of items to return', default: 10 },
+          mediaType: { type: 'string', enum: ['image', 'video', 'audio', 'document'] },
+          perPage: { type: 'number', description: 'Number of items to return' }
         },
-        required: [],
+        required: ['action']
       },
-      execute: async (params) => {
-        return this.listMedia(params);
+      execute: async (params, context) => {
+        return this.executeMediaAction(params, context);
       }
     });
   }
-  
-  createUserOperations(userFeatures) {
-    // Editorial Review Workflow - for editors
-    this.featureMap.set('review-content', {
-      name: 'Review Content',
-      description: 'Review and manage pending posts and comments',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          contentType: { type: 'string', enum: ['posts', 'comments'], description: 'Type of content to review' },
-          status: { type: 'string', enum: ['pending', 'draft'], description: 'Status filter' },
-          perPage: { type: 'number', description: 'Number of items to return', default: 10 },
-        },
-        required: ['contentType'],
-      },
-      execute: async (params) => {
-        return this.reviewContent(params);
-      }
-    });
 
-    // Moderate Comments - for editors
-    this.featureMap.set('moderate-comments', {
-      name: 'Moderate Comments',
-      description: 'Approve, reject, or manage comments in bulk',
+  createSiteAdministrationTool() {
+    this.featureMap.set('site-administration', {
+      name: 'site-administration',
+      description: '[Site Administration] Manage categories, users, and settings',
       inputSchema: {
         type: 'object',
         properties: {
-          commentIds: { type: 'array', items: { type: 'number' }, description: 'IDs of comments to moderate' },
-          action: { type: 'string', enum: ['approve', 'hold', 'spam', 'trash'], description: 'Moderation action' },
-          reason: { type: 'string', description: 'Optional reason for action' },
-        },
-        required: ['commentIds', 'action'],
-      },
-      execute: async (params) => {
-        return this.moderateComments(params);
-      }
-    });
-
-    // Manage Categories - for editors
-    this.featureMap.set('manage-categories', {
-      name: 'Manage Categories',
-      description: 'Create, update, and organize content categories',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string', enum: ['list', 'create', 'update', 'delete'], description: 'Category action' },
-          categoryId: { type: 'number', description: 'Category ID (for update/delete)' },
+          action: {
+            type: 'string',
+            enum: ['review', 'moderate', 'categories'],
+            description: 'Administration action to perform'
+          },
+          contentType: { type: 'string', enum: ['posts', 'comments'] },
+          status: { type: 'string', enum: ['pending', 'draft', 'all', 'approved', 'spam', 'trash'] },
+          perPage: { type: 'number', description: 'Number of items to return' },
+          commentIds: { type: 'array', items: { type: 'number' } },
+          moderateAction: { type: 'string', enum: ['approve', 'hold', 'spam', 'trash'] },
+          reason: { type: 'string', description: 'Reason for action' },
+          categoryAction: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+          categoryId: { type: 'number', description: 'Category ID' },
           name: { type: 'string', description: 'Category name' },
           description: { type: 'string', description: 'Category description' },
-          parentId: { type: 'number', description: 'Parent category ID' },
+          parentId: { type: 'number', description: 'Parent category ID' }
         },
-        required: ['action'],
+        required: ['action']
       },
-      execute: async (params) => {
-        return this.manageCategories(params);
+      execute: async (params, context) => {
+        return this.executeAdminAction(params, context);
       }
     });
   }
-  
+
+  // Action routing methods that delegate to existing implementation classes
+  async executeContentAction(params, context) {
+    switch (params.action) {
+      case 'draft':
+        return this.createDraftArticle(params);
+      case 'publish':
+        return this.publishArticle(params);
+      case 'edit':
+        return this.editDraft(params);
+      case 'pull':
+        return this.pullForEditing(params, context);
+      case 'sync':
+        return this.syncToWordPress(params, context);
+      case 'page':
+        return this.createPage(params);
+      case 'trash':
+        return this.trashContent(params);
+      case 'markdown-to-wp':
+        return this.markdownToWordPress(params);
+      case 'bulk':
+        return this.bulkContentOperations(params);
+      default:
+        throw new Error(`Unknown content action: ${params.action}`);
+    }
+  }
+
+  async executeBlockAction(params, context) {
+    const { server } = context;
+    const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+    
+    if (!sessionManager) {
+      throw new Error('No active document sessions. Use content-management with action "pull" first.');
+    }
+
+    switch (params.action) {
+      // Original low-level actions
+      case 'list':
+        return sessionManager.listBlocks(params.documentHandle, params.filter || {});
+      case 'read':
+        return sessionManager.readBlock(params.documentHandle, params.blockId);
+      case 'edit':
+        return sessionManager.editBlock(params.documentHandle, params.blockId, params);
+      case 'insert':
+        // Check if this is a semantic type pattern
+        if (params.type && params.type.startsWith('semantic-')) {
+          const semanticType = params.type.replace('semantic-', '');
+          return this.addSemanticBlock(sessionManager, params.documentHandle, semanticType, params.content);
+        }
+        return sessionManager.insertBlock(params.documentHandle, params);
+      case 'delete':
+        return sessionManager.deleteBlock(params.documentHandle, params.blockId);
+      case 'reorder':
+        return sessionManager.reorderBlocks(params.documentHandle, params.blockId, params.newPosition);
+      case 'validate':
+        return sessionManager.validateBlocks(params.documentHandle, params.blocks);
+      
+      // Semantic content actions
+      case 'add-section':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'section', params.content);
+      case 'add-subsection':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'subsection', params.content);
+      case 'add-paragraph':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'paragraph', params.content);
+      case 'add-list':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'list', params.content);
+      case 'add-quote':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'quote', params.content);
+      case 'add-code':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'code', params.content);
+      case 'add-separator':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'separator', '');
+      case 'continue-writing':
+        return this.continueWriting(sessionManager, params.documentHandle, params.content);
+      
+      default:
+        throw new Error(`Unknown block action: ${params.action}`);
+    }
+  }
+
+  async executeWorkflowAction(params, context) {
+    switch (params.action) {
+      case 'find':
+        return this.findPostsForWorkflow(params);
+      case 'submit':
+        return this.submitForReview(params);
+      case 'publish':
+        return this.publishWorkflow({
+          postId: params.postId,
+          action: params.publishAction,
+          schedule_date: params.schedule_date
+        });
+      case 'feedback':
+        return this.viewEditorialFeedback(params);
+      default:
+        throw new Error(`Unknown workflow action: ${params.action}`);
+    }
+  }
+
+  async executeMediaAction(params, context) {
+    switch (params.action) {
+      case 'upload':
+        return this.uploadImageFromUrl(params);
+      case 'manage':
+        return this.listMedia(params);
+      default:
+        throw new Error(`Unknown media action: ${params.action}`);
+    }
+  }
+
+  async executeAdminAction(params, context) {
+    switch (params.action) {
+      case 'review':
+        return this.reviewContent(params);
+      case 'moderate':
+        return this.moderateComments({
+          commentIds: params.commentIds,
+          action: params.moderateAction,
+          reason: params.reason
+        });
+      case 'categories':
+        return this.manageCategories({
+          action: params.categoryAction,
+          categoryId: params.categoryId,
+          name: params.name,
+          description: params.description,
+          parentId: params.parentId
+        });
+      default:
+        throw new Error(`Unknown admin action: ${params.action}`);
+    }
+  }
+
   getSemanticOperations() {
     return Array.from(this.featureMap.values());
+  }
+  
+  getGroupedSemanticOperations() {
+    // Return the 5 unified semantic tools organized by groups
+    const groups = {
+      'content-management': {
+        name: 'Content Management', 
+        description: 'Create, edit, and manage posts and pages',
+        operations: []
+      },
+      'block-editor': {
+        name: 'Block Editor',
+        description: 'Edit content using WordPress blocks', 
+        operations: []
+      },
+      'publishing-workflow': {
+        name: 'Publishing Workflow',
+        description: 'Review, approve, and publish content',
+        operations: []
+      },
+      'media-management': {
+        name: 'Media Management',
+        description: 'Upload and manage media files',
+        operations: []
+      },
+      'site-administration': {
+        name: 'Site Administration', 
+        description: 'Manage categories, users, and settings',
+        operations: []
+      }
+    };
+
+    // Map the 5 unified tools to their respective groups
+    const toolMapping = {
+      'content-management': 'content-management',
+      'block-editor': 'block-editor', 
+      'publishing-workflow': 'publishing-workflow',
+      'media-management': 'media-management',
+      'site-administration': 'site-administration'
+    };
+
+    for (const [toolName, groupKey] of Object.entries(toolMapping)) {
+      const tool = this.featureMap.get(toolName);
+      if (tool) {
+        groups[groupKey].operations.push({
+          ...tool,
+          group: groupKey,
+          groupName: groups[groupKey].name
+        });
+      }
+    }
+
+    return groups;
+  }
+
+  async trashContent(params) {
+    try {
+      const { postId, contentType = 'post' } = params;
+      
+      // Use the existing trash-own-content feature logic
+      const currentUser = await this.wpClient.request('/users/me');
+      const currentUserId = currentUser.id;
+
+      // Get the content to check ownership
+      let content;
+      if (contentType === 'post') {
+        content = await this.wpClient.getPost(postId);
+      } else {
+        content = await this.wpClient.getPage(postId);
+      }
+
+      // Check if user owns the content (for non-administrators)
+      if (content.author !== currentUserId) {
+        return {
+          success: false,
+          error: 'Permission denied',
+          message: `You can only trash your own ${contentType}s. This ${contentType} belongs to another author.`
+        };
+      }
+
+      // User owns the content, proceed with trashing
+      let result;
+      if (contentType === 'post') {
+        result = await this.wpClient.deletePost(postId, false); // false = don't force delete, just trash
+      } else {
+        result = await this.wpClient.deletePage(postId, false); // false = don't force delete, just trash
+      }
+
+      return {
+        success: true,
+        contentId: postId,
+        contentType,
+        title: result.title?.rendered || result.title?.raw || `${contentType} ${postId}`,
+        message: `Successfully moved ${contentType} "${result.title?.rendered || result.title?.raw}" to trash`,
+        hint: `To restore this ${contentType}, an editor or administrator can help, or you can restore it from the WordPress admin panel.`
+      };
+
+    } catch (error) {
+      // Handle specific WordPress errors
+      if (error.code === 'rest_post_invalid_id' || error.code === 'rest_page_invalid_id') {
+        return {
+          success: false,
+          error: 'Not found',
+          message: `${params.contentType || 'post'} with ID ${params.postId} not found`
+        };
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Failed to trash content',
+        message: `Could not move ${params.contentType || 'post'} to trash. ${error.data?.message || error.message || ''}`
+      };
+    }
+  }
+
+  async markdownToWordPress(params) {
+    try {
+      const { filePath, type = 'post', title, parent, recurse = false } = params;
+      
+      // Validate recurse option - only allowed with type="page" and directory input
+      if (recurse && type !== 'page') {
+        throw new Error('Recursive import is only allowed for pages (type="page")');
+      }
+      
+      // Get list of markdown files to process
+      const markdownFiles = this.resolveMarkdownFiles(filePath, recurse);
+      
+      if (markdownFiles.length === 0) {
+        throw new Error('No markdown files found matching the specified path(s)');
+      }
+
+      const results = [];
+      const errors = [];
+
+      if (recurse && type === 'page') {
+        // Recursive processing with parent-child hierarchy
+        const pageHierarchy = await this.processMarkdownHierarchy(markdownFiles, parent);
+        results.push(...pageHierarchy.results);
+        errors.push(...pageHierarchy.errors);
+      } else {
+        // Normal processing - flat structure
+        for (const fileInfo of markdownFiles) {
+          try {
+            // Handle both string paths and file info objects
+            const filePath = typeof fileInfo === 'string' ? fileInfo : fileInfo.fullPath;
+            const result = await this.processMarkdownFile(filePath, { type, title, parent });
+            results.push(result);
+          } catch (error) {
+            errors.push({
+              file: typeof fileInfo === 'string' ? fileInfo : fileInfo.fullPath,
+              error: error.message
+            });
+          }
+        }
+      }
+
+      // Return results summary
+      if (results.length === 1 && errors.length === 0) {
+        // Single file success - return simple result
+        return results[0];
+      }
+
+      return {
+        success: errors.length === 0,
+        processed: results.length + errors.length,
+        successful: results.length,
+        failed: errors.length,
+        results,
+        errors,
+        message: `Processed ${markdownFiles.length} markdown files: ${results.length} successful, ${errors.length} failed`,
+        hint: errors.length > 0 ? 'Check errors array for details on failed conversions' : 'All files converted successfully'
+      };
+
+    } catch (error) {
+      throw new Error(`Failed to convert markdown to WordPress: ${error.message}`);
+    }
+  }
+
+  resolveMarkdownFiles(filePath, recurse = false) {
+    
+    let pathsToProcess = Array.isArray(filePath) ? filePath : [filePath];
+    const markdownFiles = [];
+
+    for (let inputPath of pathsToProcess) {
+      // Validate path against allowed patterns
+      if (!this.isPathAllowed(inputPath)) {
+        throw new Error(`Access denied: Path not in allowed locations: ${inputPath}`);
+      }
+
+      if (!fs.existsSync(inputPath)) {
+        throw new Error(`Path not found: ${inputPath}`);
+      }
+
+      const stat = fs.statSync(inputPath);
+      
+      if (stat.isFile()) {
+        // Single file - check if it's markdown
+        if (this.isMarkdownFile(inputPath)) {
+          markdownFiles.push(inputPath);
+        }
+      } else if (stat.isDirectory()) {
+        // Directory - find all markdown files
+        if (recurse) {
+          // Recursive processing - collect files with their directory structure
+          this.collectMarkdownFilesRecursive(inputPath, inputPath, markdownFiles);
+        } else {
+          // Non-recursive - only files in this directory
+          const files = fs.readdirSync(inputPath);
+          for (const file of files) {
+            const fullPath = path.join(inputPath, file);
+            if (fs.statSync(fullPath).isFile() && this.isMarkdownFile(fullPath)) {
+              markdownFiles.push(fullPath);
+            }
+          }
+        }
+      }
+    }
+
+    return markdownFiles;
+  }
+
+  isMarkdownFile(filePath) {
+    const ext = filePath.toLowerCase().split('.').pop();
+    return ['md', 'markdown'].includes(ext);
+  }
+
+  collectMarkdownFilesRecursive(dirPath, rootPath, fileList) {
+    const files = fs.readdirSync(dirPath);
+    
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        // Recursively process subdirectories
+        this.collectMarkdownFilesRecursive(fullPath, rootPath, fileList);
+      } else if (stat.isFile() && this.isMarkdownFile(fullPath)) {
+        // Add markdown file with relative path info
+        fileList.push({
+          fullPath,
+          relativePath: path.relative(rootPath, fullPath),
+          parentDir: path.relative(rootPath, dirPath)
+        });
+      }
+    }
+  }
+
+  async processMarkdownHierarchy(fileList, rootParent) {
+    const results = [];
+    const errors = [];
+    const directoryPages = new Map(); // Track created pages for each directory
+    
+    // Sort files by depth to ensure parent directories are processed first
+    const sortedFiles = fileList.sort((a, b) => {
+      const depthA = a.relativePath.split(path.sep).length;
+      const depthB = b.relativePath.split(path.sep).length;
+      return depthA - depthB;
+    });
+
+    for (const fileInfo of sortedFiles) {
+      try {
+        let parentId = rootParent;
+        
+        // If file is in a subdirectory, ensure parent pages exist
+        if (fileInfo.parentDir) {
+          const dirParts = fileInfo.parentDir.split(path.sep);
+          let currentPath = '';
+          
+          for (const dirPart of dirParts) {
+            currentPath = currentPath ? path.join(currentPath, dirPart) : dirPart;
+            
+            if (!directoryPages.has(currentPath)) {
+              // Create a page for this directory
+              const dirTitle = dirPart.charAt(0).toUpperCase() + dirPart.slice(1).replace(/-/g, ' ');
+              const dirPage = await this.wpClient.createPage({
+                title: { raw: dirTitle },
+                content: { raw: `<p>Pages in ${dirTitle}</p>` },
+                status: 'draft',
+                parent: parentId || undefined
+              });
+              
+              directoryPages.set(currentPath, dirPage.id);
+              results.push({
+                success: true,
+                contentId: dirPage.id,
+                contentType: 'page',
+                title: dirPage.title.rendered,
+                status: dirPage.status,
+                editLink: dirPage.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
+                sourceFile: `${currentPath} (directory)`,
+                message: `Created parent page for directory: ${dirPart}`
+              });
+            }
+            
+            parentId = directoryPages.get(currentPath);
+          }
+        }
+        
+        // Process the markdown file with appropriate parent
+        const result = await this.processMarkdownFile(fileInfo.fullPath, { 
+          type: 'page', 
+          parent: parentId 
+        });
+        results.push(result);
+        
+      } catch (error) {
+        errors.push({
+          file: fileInfo.fullPath,
+          error: error.message
+        });
+      }
+    }
+    
+    return { results, errors };
+  }
+
+  async processMarkdownFile(filePath, options) {
+    const { type = 'post', title, parent } = options;
+
+    // Read markdown content
+    const markdownContent = fs.readFileSync(filePath, 'utf8');
+    
+    // Extract title from markdown if not provided
+    let extractedTitle = title;
+    if (!extractedTitle) {
+      const titleMatch = markdownContent.match(/^#\s+(.+)$/m);
+      extractedTitle = titleMatch ? titleMatch[1] : path.basename(filePath, path.extname(filePath));
+    }
+
+    // Convert markdown to HTML
+    const htmlContent = this.markdownToHtml(markdownContent);
+
+    // Create the content data
+    const contentData = {
+      title: { raw: extractedTitle },
+      content: { raw: htmlContent },
+      status: 'draft'
+    };
+
+    if (parent && type === 'page') {
+      contentData.parent = parent;
+    }
+
+    // Create the content in WordPress
+    let result;
+    if (type === 'page') {
+      result = await this.wpClient.createPage(contentData);
+    } else {
+      result = await this.wpClient.createPost(contentData);
+    }
+
+    return {
+      success: true,
+      contentId: result.id,
+      contentType: type,
+      title: result.title.rendered,
+      status: result.status,
+      editLink: result.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
+      sourceFile: filePath,
+      message: `Converted "${path.basename(filePath)}" to WordPress ${type} draft`
+    };
+  }
+
+  markdownToHtml(markdown) {
+    // Basic markdown to HTML conversion
+    // This should ideally use a proper markdown parser
+    return markdown
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+      .replace(/^\- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+      .replace(/^(.+)$/gm, '<p>$1</p>')
+      .replace(/<\/p>\s*<p>/g, '</p>\n<p>')
+      .replace(/<p><h([1-6])>/g, '<h$1>')
+      .replace(/<\/h([1-6])><\/p>/g, '</h$1>')
+      .replace(/<p><ul>/g, '<ul>')
+      .replace(/<\/ul><\/p>/g, '</ul>');
   }
   
   getOperation(name) {
@@ -576,6 +790,12 @@ export class FeatureMapper {
         status: post.status,
         editLink: post.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
         message: `Draft created successfully: "${params.title}"`,
+        semanticContext: {
+          contentType: 'post',
+          hint: 'Draft created - use edit-draft to modify or submit-for-review when ready'
+        },
+        suggestedActions: ['edit-draft', 'pull-for-editing', 'submit-for-review'],
+        workflowGuidance: '📝 Your draft is saved. Next steps:\n- Use pull-for-editing to edit with blocks\n- Use submit-for-review when ready for publication'
       };
     } catch (error) {
       throw new Error(`Failed to create draft: ${error.message}`);
@@ -724,13 +944,39 @@ export class FeatureMapper {
 
   async uploadImageFromUrl(params) {
     try {
-      const response = await fetch(params.imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
+      let imageBlob;
+      let filename;
 
-      const imageBlob = await response.blob();
-      const filename = params.imageUrl.split('/').pop() || 'uploaded-image.jpg';
+      // Check if this is a local file path
+      if (params.imageUrl.startsWith('/') || params.imageUrl.startsWith('file://') || params.imageUrl.startsWith('$')) {
+        // Handle local file upload
+        const filePath = params.imageUrl.replace('file://', '');
+        
+        // Validate against allowed paths
+        if (!this.isPathAllowed(filePath)) {
+          throw new Error(`Access denied: Path not in allowed locations`);
+        }
+
+        
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const fileBuffer = fs.readFileSync(filePath);
+        // Create a File-like object for Node.js environment
+        imageBlob = new File([fileBuffer], path.basename(filePath), {
+          type: this.getMimeType(filePath)
+        });
+        filename = path.basename(filePath);
+      } else {
+        // Handle URL upload
+        const response = await fetch(params.imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        imageBlob = await response.blob();
+        filename = params.imageUrl.split('/').pop() || 'uploaded-image.jpg';
+      }
       
       const media = await this.wpClient.uploadMedia(imageBlob, filename);
       
@@ -756,6 +1002,141 @@ export class FeatureMapper {
     } catch (error) {
       throw new Error(`Failed to upload image: ${error.message}`);
     }
+  }
+
+  expandEnvVars(str) {
+    // Replace $VAR and ${VAR} patterns with environment variables
+    return str.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+      // Handle ${VAR:-default} syntax
+      const [name, defaultValue] = varName.split(':-');
+      return process.env[name] || defaultValue || '';
+    }).replace(/\$([A-Z_][A-Z0-9_]*)/g, (match, varName) => {
+      return process.env[varName] || match;
+    });
+  }
+
+  isPathAllowed(filePath) {
+    const allowedPaths = process.env.ALLOWED_FILE_PATHS;
+    if (!allowedPaths) {
+      return false; // No local paths allowed if not configured
+    }
+
+    // Only expand env vars in the allowed patterns from config, NOT in the input path
+    const allowedPatterns = allowedPaths.split(',').map(p => this.expandEnvVars(p.trim()));
+
+    // Check if the file path starts with any allowed pattern
+    return allowedPatterns.some(pattern => {
+      return filePath.startsWith(pattern);
+    });
+  }
+
+  async bulkContentOperations(params) {
+    try {
+      const { operation, contentIds, newStatus } = params;
+      
+      // Use the existing bulk-content-operations feature logic
+      const results = [];
+      const errors = [];
+      
+      for (const contentId of contentIds) {
+        try {
+          let result;
+          let actualContentType;
+          
+          // First, try to determine the content type by attempting to fetch it
+          let isPost = false;
+          let isPage = false;
+          
+          try {
+            await this.wpClient.getPost(contentId);
+            isPost = true;
+            actualContentType = 'post';
+          } catch (e) {
+            // Not a post, try page
+            try {
+              await this.wpClient.getPage(contentId);
+              isPage = true;
+              actualContentType = 'page';
+            } catch (e2) {
+              // Neither post nor page
+              throw new Error(`Content ID ${contentId} not found as post or page`);
+            }
+          }
+          
+          switch (operation) {
+            case 'trash':
+              // Use DELETE method without force parameter to move to trash
+              if (isPost) {
+                result = await this.wpClient.deletePost(contentId, false);
+              } else {
+                result = await this.wpClient.deletePage(contentId, false);
+              }
+              break;
+              
+            case 'delete':
+              if (isPost) {
+                result = await this.wpClient.deletePost(contentId, true);
+              } else {
+                result = await this.wpClient.deletePage(contentId, true);
+              }
+              break;
+              
+            case 'change_status':
+              if (!newStatus) {
+                throw new Error('newStatus is required for change_status operation');
+              }
+              if (isPost) {
+                result = await this.wpClient.updatePost(contentId, { status: newStatus });
+              } else {
+                result = await this.wpClient.updatePage(contentId, { status: newStatus });
+              }
+              break;
+          }
+          
+          results.push({
+            contentId,
+            contentType: actualContentType,
+            success: true,
+            title: result.title?.rendered || result.title?.raw || `${actualContentType} ${contentId}`,
+          });
+        } catch (error) {
+          errors.push({
+            contentId,
+            error: error.message,
+          });
+        }
+      }
+      
+      return {
+        success: errors.length === 0,
+        operation,
+        processed: results.length + errors.length,
+        successful: results.length,
+        failed: errors.length,
+        results,
+        errors,
+        message: `Bulk ${operation} completed: ${results.length} successful, ${errors.length} failed`
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to perform bulk operation: ${error.message}`);
+    }
+  }
+
+  getMimeType(filePath) {
+    const ext = filePath.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'svg': 'image/svg+xml',
+      'md': 'text/markdown',
+      'txt': 'text/plain',
+      'pdf': 'application/pdf'
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
   }
 
   async listMedia(params) {
@@ -944,28 +1325,25 @@ export class FeatureMapper {
 
   // Temp file workflow methods
 
-  async pullForEditing(params) {
+  async pullForEditing(params, context) {
     try {
+      const { documentSessionManager } = context;
+      const wpClient = context.wpClient || this.wpClient;
       const contentType = params.type || 'post';
       
       // Fetch the content from WordPress based on type
       const content = contentType === 'page' 
-        ? await this.wpClient.getPage(params.postId)
-        : await this.wpClient.getPost(params.postId);
+        ? await wpClient.getPage(params.postId)
+        : await wpClient.getPost(params.postId);
       
-      // Format content with metadata header
-      const formattedContent = contentType === 'page'
-        ? this.formatPageForEditing(content)
-        : this.formatPostForEditing(content);
-      
-      // Create editing session (filesystem abstracted)
-      const session = await this.sessionManager.createSession(
+      // Create editing session with blocks using the enhanced session manager
+      const session = await documentSessionManager.createSession(
         params.postId, 
-        formattedContent, 
+        content.content.raw || content.content.rendered,
         {
           title: content.title.rendered,
           status: content.status,
-          type: contentType,
+          contentType: contentType,
           // Page-specific metadata
           ...(contentType === 'page' && {
             parent: content.parent,
@@ -990,10 +1368,59 @@ export class FeatureMapper {
     }
   }
 
-  async syncToWordPress(params) {
+  async syncToWordPress(params, context) {
     try {
-      // Get document content using session manager (filesystem abstracted)
-      const content = await this.sessionManager.getDocumentContent(params.documentHandle);
+      const { wpClient, documentSessionManager } = context;
+      
+      // Check if this is a block session or legacy markdown session
+      if (documentSessionManager.hasSession && documentSessionManager.hasSession(params.documentHandle)) {
+        // New block format - get content and metadata directly
+        const syncData = await documentSessionManager.getContentForSync(params.documentHandle);
+        
+        if (!syncData.hasChanges) {
+          return {
+            success: true,
+            message: 'No changes to sync',
+            contentId: syncData.contentId,
+            contentType: syncData.contentType
+          };
+        }
+        
+        // Prepare update data for WordPress
+        const updateData = {
+          content: syncData.content, // Already in WordPress block HTML format
+        };
+        
+        // Update the content in WordPress
+        const isPage = syncData.contentType === 'page';
+        const updatedContent = isPage 
+          ? await wpClient.updatePage(syncData.contentId, updateData)
+          : await wpClient.updatePost(syncData.contentId, updateData);
+        
+        // Close session if requested (default: true)
+        if (params.closeSession !== false) {
+          await documentSessionManager.closeSession(params.documentHandle);
+        }
+        
+        return {
+          success: true,
+          [`${isPage ? 'page' : 'post'}Id`]: syncData.contentId,
+          title: updatedContent.title.rendered,
+          status: updatedContent.status,
+          documentHandle: params.documentHandle,
+          sessionClosed: params.closeSession !== false,
+          message: `${isPage ? 'Page' : 'Post'} synced to WordPress successfully`,
+          semanticContext: {
+            contentType: syncData.contentType,
+            hint: isPage 
+              ? 'Page updated - remember pages are for static, timeless content'
+              : 'Post updated - posts are for time-based content like news or articles'
+          }
+        };
+      }
+      
+      // Legacy markdown format fallback
+      const content = await documentSessionManager.getDocumentContent(params.documentHandle);
       
       // Check if it's a page or post
       const isPage = content.includes('**Page Metadata:**');
@@ -1023,12 +1450,12 @@ export class FeatureMapper {
 
       // Update the content
       const updatedContent = isPage 
-        ? await this.wpClient.updatePage(postId, updateData)
-        : await this.wpClient.updatePost(postId, updateData);
+        ? await wpClient.updatePage(postId, updateData)
+        : await wpClient.updatePost(postId, updateData);
 
       // Close session if requested (default: true)
       if (params.closeSession !== false) {
-        await this.sessionManager.closeSession(params.documentHandle);
+        await documentSessionManager.closeSession(params.documentHandle);
       }
 
       return {
@@ -1249,30 +1676,50 @@ ${cleanContent}
       }
       // For 'any', don't add status filter - WordPress will return based on user permissions
       
-      // Make the API request (listPosts returns array directly)
-      const posts = await this.wpClient.listPosts(searchParams);
+      // Determine content type to search
+      const contentType = params.contentType || 'any'; // Default to 'any' to get both posts and pages
       
-      // Since listPosts doesn't return headers, we'll estimate pagination
-      // This is a limitation we'll need to address later
-      const totalItems = posts.length;
+      let allContent = [];
+      
+      // Fetch posts and/or pages based on contentType parameter
+      if (contentType === 'post' || contentType === 'any') {
+        const posts = await this.wpClient.listPosts(searchParams);
+        allContent.push(...posts.map(item => ({ ...item, type: 'post' })));
+      }
+      
+      if (contentType === 'page' || contentType === 'any') {
+        const pages = await this.wpClient.listPages(searchParams);
+        allContent.push(...pages.map(item => ({ ...item, type: 'page' })));
+      }
+      
+      // Sort all content by modified date (newest first)
+      allContent.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+      
+      // Apply pagination to combined results
+      const startIndex = (page - 1) * perPage;
+      const paginatedContent = allContent.slice(startIndex, startIndex + perPage);
+      
+      // Calculate total items and pages
+      const totalItems = allContent.length;
       const totalPages = Math.ceil(totalItems / perPage);
       
       // Format results with workflow suggestions
-      const formattedPosts = posts.map(post => {
+      const formattedContent = paginatedContent.map(item => {
         const baseInfo = {
-          id: post.id,
-          title: post.title.rendered,
-          status: post.status,
-          date: post.date,
-          modified: post.modified,
-          excerpt: post.excerpt.rendered.replace(/<[^>]*>/g, '').trim(),
-          author: post._embedded?.author?.[0]?.name || `User ${post.author}`,
-          categories: post._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [],
-          tags: post._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || []
+          id: item.id,
+          type: item.type, // 'post' or 'page'
+          title: item.title.rendered,
+          status: item.status,
+          date: item.date,
+          modified: item.modified,
+          excerpt: item.excerpt.rendered.replace(/<[^>]*>/g, '').trim(),
+          author: item._embedded?.author?.[0]?.name || `User ${item.author}`,
+          categories: item._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [],
+          tags: item._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || []
         };
         
         // Add suggested actions based on status and intent
-        const suggestedActions = this.getSuggestedActions(post.status, params.intent);
+        const suggestedActions = this.getSuggestedActions(item.status, params.intent);
         
         return {
           ...baseInfo,
@@ -1281,17 +1728,18 @@ ${cleanContent}
       });
       
       // Provide workflow guidance
-      const workflowGuidance = this.getWorkflowGuidance(params.intent, formattedPosts.length, totalItems);
+      const workflowGuidance = this.getWorkflowGuidance(params.intent, formattedContent.length, totalItems);
       
       return {
         success: true,
         query: params.query || '',
         intent: params.intent || 'any',
+        contentType: contentType,
         page,
         perPage,
         totalItems,
         totalPages,
-        posts: formattedPosts,
+        posts: formattedContent, // Keep 'posts' key for backward compatibility but it contains both posts and pages
         workflowGuidance
       };
       
@@ -1558,6 +2006,151 @@ ${cleanContent}
       
     } catch (error) {
       throw new Error(`Failed to publish: ${error.message}`);
+    }
+  }
+
+  // Semantic Block Methods - Abstract WordPress complexity with intent-based actions
+
+  async addSemanticBlock(sessionManager, documentHandle, semanticType, content) {
+    try {
+      // Get current document structure for context-aware positioning
+      const blocks = await sessionManager.listBlocks(documentHandle);
+      const position = blocks.total; // Append by default
+      
+      // Map semantic types to WordPress blocks with smart defaults
+      const blockConfig = this.getSemanticBlockConfig(semanticType, blocks, content);
+      
+      const result = await sessionManager.insertBlock(documentHandle, {
+        type: blockConfig.type,
+        content: blockConfig.content,
+        position: blockConfig.position || position,
+        attributes: blockConfig.attributes,
+        validateImmediately: true
+      });
+
+      if (result.success) {
+        // Add semantic context and suggestions
+        result.semanticType = semanticType;
+        result.semanticContext = {
+          hint: blockConfig.hint,
+          suggestedNext: blockConfig.suggestedNext
+        };
+      }
+
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to add ${semanticType}: ${error.message}`);
+    }
+  }
+
+  getSemanticBlockConfig(semanticType, existingBlocks, content) {
+    // Analyze document structure for smart defaults
+    const hasHeadings = existingBlocks.blocks.some(b => b.type === 'core/heading');
+    const lastBlock = existingBlocks.blocks[existingBlocks.total - 1];
+    
+    switch (semanticType) {
+      case 'section':
+        return {
+          type: 'core/heading',
+          content: content || 'New Section',
+          attributes: { level: hasHeadings ? 2 : 1 }, // H1 for first, H2 for subsequent
+          hint: 'Section heading added - use add-paragraph to start content',
+          suggestedNext: ['add-paragraph', 'add-subsection', 'add-list']
+        };
+        
+      case 'subsection':
+        return {
+          type: 'core/heading', 
+          content: content || 'New Subsection',
+          attributes: { level: hasHeadings ? 3 : 2 }, // Smart level based on context
+          hint: 'Subsection heading added - add content to develop this section',
+          suggestedNext: ['add-paragraph', 'add-list', 'add-quote']
+        };
+        
+      case 'paragraph':
+        return {
+          type: 'core/paragraph',
+          content: content || 'Your content here...',
+          attributes: {},
+          hint: 'Paragraph added - continue writing or add another content type',
+          suggestedNext: ['continue-writing', 'add-list', 'add-quote', 'add-section']
+        };
+        
+      case 'list':
+        // Detect if content should be ordered or unordered
+        const isNumbered = /^\d+\./.test(content);
+        return {
+          type: 'core/list',
+          content: content || '• First item\n• Second item',
+          attributes: { ordered: isNumbered },
+          hint: 'List added - each line becomes a list item',
+          suggestedNext: ['add-paragraph', 'add-section', 'add-quote']
+        };
+        
+      case 'quote':
+        return {
+          type: 'core/quote',
+          content: `<p>${content || 'Your quote here...'}</p>`,
+          attributes: {},
+          hint: 'Quote block added - great for highlighting key insights',
+          suggestedNext: ['add-paragraph', 'add-section', 'continue-writing']
+        };
+        
+      case 'code':
+        return {
+          type: 'core/code',
+          content: content || '// Your code here',
+          attributes: {},
+          hint: 'Code block added - preserves formatting and spacing',
+          suggestedNext: ['add-paragraph', 'add-section', 'continue-writing']
+        };
+        
+      case 'separator':
+        return {
+          type: 'core/separator',
+          content: '',
+          attributes: {},
+          hint: 'Visual separator added - helps organize content sections',
+          suggestedNext: ['add-section', 'add-paragraph']
+        };
+        
+      default:
+        throw new Error(`Unknown semantic type: ${semanticType}`);
+    }
+  }
+
+  async continueWriting(sessionManager, documentHandle, content) {
+    try {
+      // Get the last block to understand context
+      const blocks = await sessionManager.listBlocks(documentHandle);
+      const lastBlock = blocks.blocks[blocks.total - 1];
+      
+      if (!lastBlock) {
+        // No blocks yet, start with a paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      }
+      
+      // Smart continuation based on last block type
+      if (lastBlock.type === 'core/paragraph') {
+        // Continue with another paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      } else if (lastBlock.type === 'core/heading') {
+        // After heading, add content paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      } else if (lastBlock.type === 'core/list') {
+        // Continue list or add paragraph after list
+        const continueList = content && (content.includes('•') || content.includes('-') || /^\d+\./.test(content));
+        if (continueList) {
+          return this.addSemanticBlock(sessionManager, documentHandle, 'list', content);
+        } else {
+          return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+        }
+      } else {
+        // Default to paragraph for other types
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      }
+    } catch (error) {
+      throw new Error(`Failed to continue writing: ${error.message}`);
     }
   }
 

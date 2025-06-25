@@ -1,0 +1,30 @@
+{
+  "blocks": {
+    "enabled": true,
+    "fallbackToClassic": true,
+    "formats": {
+      "detectPluginFormats": true,
+      "fallbackStrategy": "annotate",
+      "customFormatSyntax": "{{format:params}}content{{/format}}",
+      "preserveUnknownFormats": false
+    }
+  },
+  "descriptions": {
+    "contextual": true,
+    "verbosity": "adaptive",
+    "includeExamples": true,
+    "showAvailableBlocks": true
+  },
+  "validation": {
+    "validateOnEdit": true,
+    "validateOnInsert": true,
+    "validateBeforeSync": true,
+    "showSuggestions": true
+  },
+  "conversion": {
+    "smartBlockDetection": true,
+    "preserveFormatting": true,
+    "columnDetection": false,
+    "embedDetection": true
+  }
+}

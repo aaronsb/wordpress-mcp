@@ -13,16 +13,15 @@
   },
 
   "contributor": {
-    "name": "Contributor",
+    "name": "Contributor", 
     "description": "Create and edit draft content for editorial review",
-    "features": [
-      "find-posts",
-      "draft-article",
-      "edit-draft", 
-      "submit-for-review",
-      "view-editorial-feedback",
-      "manage-own-drafts"
-    ],
+    "tools": {
+      "content-management": ["draft", "edit", "pull", "sync"],
+      "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate"],
+      "publishing-workflow": ["find", "submit", "feedback"],
+      "media-management": [],
+      "site-administration": []
+    },
     "context": {
       "can_publish": false,
       "can_upload_media": false,
@@ -35,21 +34,14 @@
 
   "author": {
     "name": "Author",
-    "description": "Create, publish and manage own content with media capabilities",
-    "features": [
-      "find-posts",
-      "draft-article",
-      "edit-draft",
-      "submit-for-review", 
-      "view-editorial-feedback",
-      "create-article",
-      "publish-workflow",
-      "manage-media",
-      "manage-own-content",
-      "draft-page",
-      "create-page",
-      "trash-own-content"
-    ],
+    "description": "Create, publish and manage own content with media capabilities", 
+    "tools": {
+      "content-management": ["draft", "publish", "edit", "pull", "sync", "page", "trash"],
+      "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate"],
+      "publishing-workflow": ["find", "submit", "publish", "feedback"],
+      "media-management": ["upload", "manage"],
+      "site-administration": []
+    },
     "context": {
       "can_publish": true,
       "can_upload_media": true,
@@ -64,22 +56,13 @@
   "editor": {
     "name": "Editor",
     "description": "Manage content workflow, moderate submissions and oversee publication",
-    "features": [
-      "search-posts",
-      "draft-article",
-      "edit-draft",
-      "create-article", 
-      "publish-workflow",
-      "manage-media",
-      "review-submissions",
-      "moderate-content",
-      "manage-categories",
-      "editorial-workflow",
-      "content-planning",
-      "draft-page",
-      "create-page",
-      "bulk-content-operations"
-    ],
+    "tools": {
+      "content-management": ["draft", "publish", "edit", "pull", "sync", "page", "trash", "bulk"],
+      "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate", "bulk-edit"],
+      "publishing-workflow": ["find", "submit", "publish", "feedback", "review", "approve"],
+      "media-management": ["upload", "manage", "bulk"],
+      "site-administration": ["review", "moderate", "categories"]
+    },
     "context": {
       "can_publish": true,
       "can_upload_media": true,
@@ -95,15 +78,13 @@
   "administrator": {
     "name": "Administrator", 
     "description": "Full site management with advanced configuration capabilities",
-    "features": [
-      "site-management",
-      "user-management", 
-      "system-configuration",
-      "advanced-settings",
-      "draft-page",
-      "create-page",
-      "bulk-content-operations"
-    ],
+    "tools": {
+      "content-management": ["draft", "publish", "edit", "pull", "sync", "page", "trash", "bulk", "import", "export"],
+      "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate", "bulk-edit", "templates"],
+      "publishing-workflow": ["find", "submit", "publish", "feedback", "review", "approve", "bulk-review"],
+      "media-management": ["upload", "manage", "bulk", "storage"],
+      "site-administration": ["review", "moderate", "categories", "users", "settings", "bulk-operations"]
+    },
     "context": {
       "can_publish": true,
       "can_upload_media": true,
