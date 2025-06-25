@@ -61,9 +61,9 @@ class WordPressAuthorMCP {
     this.featureMapper = new FeatureMapper(this.wpClient);
     await this.featureMapper.initialize();
 
-    // Initialize feature registry (for backward compatibility)
-    this.featureRegistry = new FeatureRegistry(this.wpClient);
-    await this.featureRegistry.loadFeatures();
+    // Note: FeatureRegistry is no longer needed with unified 5-tool architecture
+    // Individual feature files are replaced by semantic tools with action routing
+    this.featureRegistry = { getFeature: () => null }; // Stub for compatibility
 
     // Initialize tool injector
     this.toolInjector = new ToolInjector(
@@ -212,28 +212,6 @@ class WordPressAuthorMCP {
   }
 
   async setupHandlers() {
-    // Register a special tool to expose the semantic groups structure
-    this.server.registerTool(
-      'get-tool-groups',
-      {
-        description: 'Get the semantic grouping of available tools',
-        inputSchema: {},
-      },
-      async () => {
-        return this.formatResponse({
-          success: true,
-          groups: Object.entries(this.semanticGroups).map(([key, group]) => ({
-            key,
-            name: group.name,
-            description: group.description,
-            toolCount: group.operations.length,
-            tools: group.operations.map(op => op.name)
-          })),
-          message: 'Tools are organized into semantic groups for better discoverability'
-        });
-      }
-    );
-
     // Register each tool with the McpServer using the proper API
     for (const tool of this.tools) {
       // Generate contextual description
