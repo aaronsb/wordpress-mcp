@@ -45,7 +45,9 @@
       "create-article",
       "publish-workflow",
       "manage-media",
-      "manage-own-content"
+      "manage-own-content",
+      "draft-page",
+      "create-page"
     ],
     "context": {
       "can_publish": true,
@@ -72,7 +74,9 @@
       "moderate-content",
       "manage-categories",
       "editorial-workflow",
-      "content-planning"
+      "content-planning",
+      "draft-page",
+      "create-page"
     ],
     "context": {
       "can_publish": true,
@@ -93,7 +97,9 @@
       "site-management",
       "user-management", 
       "system-configuration",
-      "advanced-settings"
+      "advanced-settings",
+      "draft-page",
+      "create-page"
     ],
     "context": {
       "can_publish": true,

@@ -15,16 +15,16 @@ import { WordPressClient } from './core/wordpress-client.js';
 import { ToolInjector } from './core/tool-injector.js';
 
 // Load environment variables from multiple locations
-// 1. Local .env file in server directory
-config();
+// 1. Local .env file in project root directory
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, '..');
+config({ path: join(projectRoot, '.env') });
 
 // 2. User's home directory ~/.wordpress-mcp/.env
 const homeEnvPath = join(homedir(), '.wordpress-mcp', '.env');
 if (existsSync(homeEnvPath)) {
   config({ path: homeEnvPath, override: false });
 }
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 class WordPressAuthorMCP {
   constructor() {
