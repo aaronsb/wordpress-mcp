@@ -260,4 +260,50 @@ export class WordPressClient {
       body: JSON.stringify(settings),
     });
   }
+
+  // Page operations
+  async createPage(data) {
+    // WordPress REST API expects title and content as objects with 'raw' property
+    const pageData = {
+      ...data,
+      title: typeof data.title === 'string' ? { raw: data.title } : data.title,
+      content: typeof data.content === 'string' ? { raw: data.content } : data.content,
+    };
+    
+    return this.request('/pages', {
+      method: 'POST',
+      body: JSON.stringify(pageData),
+    });
+  }
+
+  async getPage(id) {
+    return this.request(`/pages/${id}`);
+  }
+
+  async updatePage(id, data) {
+    // WordPress REST API expects title and content as objects with 'raw' property
+    const pageData = { ...data };
+    if (data.title && typeof data.title === 'string') {
+      pageData.title = { raw: data.title };
+    }
+    if (data.content && typeof data.content === 'string') {
+      pageData.content = { raw: data.content };
+    }
+    
+    return this.request(`/pages/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(pageData),
+    });
+  }
+
+  async deletePage(id, force = false) {
+    return this.request(`/pages/${id}?force=${force}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listPages(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/pages${query ? `?${query}` : ''}`);
+  }
 }
