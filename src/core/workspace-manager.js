@@ -45,6 +45,48 @@ export class WorkspaceManager {
     return join(this.workspaceDir, `post-${postId}.md`);
   }
 
+  getPagePath(pageId) {
+    return join(this.workspaceDir, `page-${pageId}.md`);
+  }
+
+  getContentPath(contentId, contentType = 'post') {
+    return contentType === 'page' 
+      ? this.getPagePath(contentId)
+      : this.getPostPath(contentId);
+  }
+
+  async pullContent(content, wpClient, contentType = 'post') {
+    const contentPath = this.getContentPath(content.id, contentType);
+    
+    // Convert content to markdown format for editing
+    const markdownContent = contentType === 'page'
+      ? this.pageToMarkdown(content)
+      : this.postToMarkdown(content);
+    
+    // Write to local file
+    await fs.writeFile(contentPath, markdownContent, 'utf8');
+    
+    // Store metadata for sync tracking
+    this.metadata.set(contentPath, {
+      contentId: content.id,
+      contentType: contentType,
+      lastSync: Date.now(),
+      lastModified: Date.now(),
+      wpHash: this.hashContent(content.content.raw || content.content.rendered),
+      localHash: this.hashContent(markdownContent),
+      status: content.status,
+      title: content.title.rendered,
+    });
+    
+    await this.saveMetadata();
+    
+    return {
+      localPath: contentPath,
+      content: markdownContent,
+      metadata: this.metadata.get(contentPath),
+    };
+  }
+
   async pullPost(post, wpClient) {
     const postPath = this.getPostPath(post.id);
     
@@ -125,43 +167,58 @@ export class WorkspaceManager {
     }
   }
 
-  async syncToWordPress(postId, wpClient) {
-    const postPath = this.getPostPath(postId);
-    const meta = this.metadata.get(postPath);
+  async syncToWordPress(contentId, wpClient, contentType = 'post') {
+    const contentPath = this.getContentPath(contentId, contentType);
+    const meta = this.metadata.get(contentPath);
     
     if (!meta) {
-      throw new Error(`Post ${postId} not found in workspace`);
+      throw new Error(`${contentType === 'page' ? 'Page' : 'Post'} ${contentId} not found in workspace`);
     }
 
     // Read current local content
-    const localContent = await fs.readFile(postPath, 'utf8');
-    const parsedContent = this.markdownToPost(localContent);
+    const localContent = await fs.readFile(contentPath, 'utf8');
+    const parsedContent = contentType === 'page' 
+      ? this.markdownToPage(localContent)
+      : this.markdownToPost(localContent);
     
-    // Update the WordPress post
+    // Update the WordPress content
     const updateData = {
       title: { raw: parsedContent.title },
       content: { raw: parsedContent.content },
-      excerpt: { raw: parsedContent.excerpt },
     };
 
-    const updatedPost = await wpClient.updatePost(postId, updateData);
+    // Add post-specific fields
+    if (contentType === 'post' && parsedContent.excerpt) {
+      updateData.excerpt = { raw: parsedContent.excerpt };
+    }
+
+    // Add page-specific fields from parsed metadata
+    if (contentType === 'page' && parsedContent.metadata) {
+      if (parsedContent.metadata.parent) updateData.parent = parsedContent.metadata.parent;
+      if (parsedContent.metadata.menu_order) updateData.menu_order = parsedContent.metadata.menu_order;
+      if (parsedContent.metadata.template) updateData.template = parsedContent.metadata.template;
+    }
+
+    const updatedContent = contentType === 'page'
+      ? await wpClient.updatePage(contentId, updateData)
+      : await wpClient.updatePost(contentId, updateData);
     
     // Update metadata
     meta.lastSync = Date.now();
-    meta.wpHash = this.hashContent(updatedPost.content.raw);
+    meta.wpHash = this.hashContent(updatedContent.content.raw);
     meta.hasChanges = false;
     
     await this.saveMetadata();
     
-    return updatedPost;
+    return updatedContent;
   }
 
-  async cleanup(postId) {
-    const postPath = this.getPostPath(postId);
+  async cleanup(contentId, contentType = 'post') {
+    const contentPath = this.getContentPath(contentId, contentType);
     
     try {
-      await fs.unlink(postPath);
-      this.metadata.delete(postPath);
+      await fs.unlink(contentPath);
+      this.metadata.delete(contentPath);
       await this.saveMetadata();
       return true;
     } catch (error) {
@@ -179,6 +236,29 @@ export class WorkspaceManager {
     
     content += `---\n\n`;
     content += post.content.rendered || post.content.raw || '';
+    
+    return content;
+  }
+
+  // Convert WordPress page to markdown for editing
+  pageToMarkdown(page) {
+    let content = `# ${page.title.rendered || page.title.raw || 'Untitled Page'}\n\n`;
+    
+    // Add page metadata as frontmatter
+    content += `<!--\nPage Type: Static Page\n`;
+    if (page.parent) {
+      content += `Parent Page ID: ${page.parent}\n`;
+    }
+    if (page.menu_order) {
+      content += `Menu Order: ${page.menu_order}\n`;
+    }
+    if (page.template) {
+      content += `Template: ${page.template}\n`;
+    }
+    content += `-->\n\n`;
+    
+    content += `---\n\n`;
+    content += page.content.rendered || page.content.raw || '';
     
     return content;
   }
@@ -208,6 +288,47 @@ export class WorkspaceManager {
       title: title.trim(),
       excerpt: excerpt.trim(), 
       content: content.trim(),
+    };
+  }
+
+  // Convert markdown back to WordPress page format
+  markdownToPage(markdown) {
+    const lines = markdown.split('\n');
+    let title = 'Untitled Page';
+    let content = '';
+    let metadata = {};
+    let inMetadata = false;
+    let inContent = false;
+    
+    for (const line of lines) {
+      if (line.startsWith('# ')) {
+        title = line.substring(2).trim();
+      } else if (line === '<!--') {
+        inMetadata = true;
+        continue;
+      } else if (line === '-->') {
+        inMetadata = false;
+        continue;
+      } else if (inMetadata) {
+        // Parse metadata lines
+        if (line.includes(':')) {
+          const [key, value] = line.split(':').map(s => s.trim());
+          if (key === 'Parent Page ID') metadata.parent = parseInt(value);
+          if (key === 'Menu Order') metadata.menu_order = parseInt(value);
+          if (key === 'Template') metadata.template = value;
+        }
+      } else if (line === '---') {
+        inContent = true;
+        continue;
+      } else if (inContent) {
+        content += line + '\n';
+      }
+    }
+    
+    return {
+      title: title.trim(),
+      content: content.trim(),
+      metadata: metadata,
     };
   }
 
