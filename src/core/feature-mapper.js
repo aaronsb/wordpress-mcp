@@ -99,7 +99,12 @@ export class FeatureMapper {
         properties: {
           action: {
             type: 'string',
-            enum: ['list', 'read', 'edit', 'insert', 'delete', 'reorder', 'validate'],
+            enum: [
+              'list', 'read', 'edit', 'insert', 'delete', 'reorder', 'validate',
+              // Semantic content actions
+              'add-section', 'add-subsection', 'add-paragraph', 'add-list', 'add-quote', 
+              'add-code', 'add-separator', 'continue-writing'
+            ],
             description: 'Block editing action to perform'
           },
           documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
@@ -241,6 +246,7 @@ export class FeatureMapper {
     }
 
     switch (params.action) {
+      // Original low-level actions
       case 'list':
         return sessionManager.listBlocks(params.documentHandle, params.filter || {});
       case 'read':
@@ -255,6 +261,25 @@ export class FeatureMapper {
         return sessionManager.reorderBlocks(params.documentHandle, params.blockId, params.newPosition);
       case 'validate':
         return sessionManager.validateBlocks(params.documentHandle, params.blocks);
+      
+      // Semantic content actions
+      case 'add-section':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'section', params.content);
+      case 'add-subsection':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'subsection', params.content);
+      case 'add-paragraph':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'paragraph', params.content);
+      case 'add-list':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'list', params.content);
+      case 'add-quote':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'quote', params.content);
+      case 'add-code':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'code', params.content);
+      case 'add-separator':
+        return this.addSemanticBlock(sessionManager, params.documentHandle, 'separator', '');
+      case 'continue-writing':
+        return this.continueWriting(sessionManager, params.documentHandle, params.content);
+      
       default:
         throw new Error(`Unknown block action: ${params.action}`);
     }
@@ -833,7 +858,54 @@ export class FeatureMapper {
     try {
       const { wpClient, documentSessionManager } = context;
       
-      // Get document content using session manager (filesystem abstracted)
+      // Check if this is a block session or legacy markdown session
+      if (documentSessionManager.hasSession && documentSessionManager.hasSession(params.documentHandle)) {
+        // New block format - get content and metadata directly
+        const syncData = await documentSessionManager.getContentForSync(params.documentHandle);
+        
+        if (!syncData.hasChanges) {
+          return {
+            success: true,
+            message: 'No changes to sync',
+            contentId: syncData.contentId,
+            contentType: syncData.contentType
+          };
+        }
+        
+        // Prepare update data for WordPress
+        const updateData = {
+          content: syncData.content, // Already in WordPress block HTML format
+        };
+        
+        // Update the content in WordPress
+        const isPage = syncData.contentType === 'page';
+        const updatedContent = isPage 
+          ? await wpClient.updatePage(syncData.contentId, updateData)
+          : await wpClient.updatePost(syncData.contentId, updateData);
+        
+        // Close session if requested (default: true)
+        if (params.closeSession !== false) {
+          await documentSessionManager.closeSession(params.documentHandle);
+        }
+        
+        return {
+          success: true,
+          [`${isPage ? 'page' : 'post'}Id`]: syncData.contentId,
+          title: updatedContent.title.rendered,
+          status: updatedContent.status,
+          documentHandle: params.documentHandle,
+          sessionClosed: params.closeSession !== false,
+          message: `${isPage ? 'Page' : 'Post'} synced to WordPress successfully`,
+          semanticContext: {
+            contentType: syncData.contentType,
+            hint: isPage 
+              ? 'Page updated - remember pages are for static, timeless content'
+              : 'Post updated - posts are for time-based content like news or articles'
+          }
+        };
+      }
+      
+      // Legacy markdown format fallback
       const content = await documentSessionManager.getDocumentContent(params.documentHandle);
       
       // Check if it's a page or post
@@ -1399,6 +1471,151 @@ ${cleanContent}
       
     } catch (error) {
       throw new Error(`Failed to publish: ${error.message}`);
+    }
+  }
+
+  // Semantic Block Methods - Abstract WordPress complexity with intent-based actions
+
+  async addSemanticBlock(sessionManager, documentHandle, semanticType, content) {
+    try {
+      // Get current document structure for context-aware positioning
+      const blocks = await sessionManager.listBlocks(documentHandle);
+      const position = blocks.total; // Append by default
+      
+      // Map semantic types to WordPress blocks with smart defaults
+      const blockConfig = this.getSemanticBlockConfig(semanticType, blocks, content);
+      
+      const result = await sessionManager.insertBlock(documentHandle, {
+        type: blockConfig.type,
+        content: blockConfig.content,
+        position: blockConfig.position || position,
+        attributes: blockConfig.attributes,
+        validateImmediately: true
+      });
+
+      if (result.success) {
+        // Add semantic context and suggestions
+        result.semanticType = semanticType;
+        result.semanticContext = {
+          hint: blockConfig.hint,
+          suggestedNext: blockConfig.suggestedNext
+        };
+      }
+
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to add ${semanticType}: ${error.message}`);
+    }
+  }
+
+  getSemanticBlockConfig(semanticType, existingBlocks, content) {
+    // Analyze document structure for smart defaults
+    const hasHeadings = existingBlocks.blocks.some(b => b.type === 'core/heading');
+    const lastBlock = existingBlocks.blocks[existingBlocks.total - 1];
+    
+    switch (semanticType) {
+      case 'section':
+        return {
+          type: 'core/heading',
+          content: content || 'New Section',
+          attributes: { level: hasHeadings ? 2 : 1 }, // H1 for first, H2 for subsequent
+          hint: 'Section heading added - use add-paragraph to start content',
+          suggestedNext: ['add-paragraph', 'add-subsection', 'add-list']
+        };
+        
+      case 'subsection':
+        return {
+          type: 'core/heading', 
+          content: content || 'New Subsection',
+          attributes: { level: hasHeadings ? 3 : 2 }, // Smart level based on context
+          hint: 'Subsection heading added - add content to develop this section',
+          suggestedNext: ['add-paragraph', 'add-list', 'add-quote']
+        };
+        
+      case 'paragraph':
+        return {
+          type: 'core/paragraph',
+          content: content || 'Your content here...',
+          attributes: {},
+          hint: 'Paragraph added - continue writing or add another content type',
+          suggestedNext: ['continue-writing', 'add-list', 'add-quote', 'add-section']
+        };
+        
+      case 'list':
+        // Detect if content should be ordered or unordered
+        const isNumbered = /^\d+\./.test(content);
+        return {
+          type: 'core/list',
+          content: content || '• First item\n• Second item',
+          attributes: { ordered: isNumbered },
+          hint: 'List added - each line becomes a list item',
+          suggestedNext: ['add-paragraph', 'add-section', 'add-quote']
+        };
+        
+      case 'quote':
+        return {
+          type: 'core/quote',
+          content: `<p>${content || 'Your quote here...'}</p>`,
+          attributes: {},
+          hint: 'Quote block added - great for highlighting key insights',
+          suggestedNext: ['add-paragraph', 'add-section', 'continue-writing']
+        };
+        
+      case 'code':
+        return {
+          type: 'core/code',
+          content: content || '// Your code here',
+          attributes: {},
+          hint: 'Code block added - preserves formatting and spacing',
+          suggestedNext: ['add-paragraph', 'add-section', 'continue-writing']
+        };
+        
+      case 'separator':
+        return {
+          type: 'core/separator',
+          content: '',
+          attributes: {},
+          hint: 'Visual separator added - helps organize content sections',
+          suggestedNext: ['add-section', 'add-paragraph']
+        };
+        
+      default:
+        throw new Error(`Unknown semantic type: ${semanticType}`);
+    }
+  }
+
+  async continueWriting(sessionManager, documentHandle, content) {
+    try {
+      // Get the last block to understand context
+      const blocks = await sessionManager.listBlocks(documentHandle);
+      const lastBlock = blocks.blocks[blocks.total - 1];
+      
+      if (!lastBlock) {
+        // No blocks yet, start with a paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      }
+      
+      // Smart continuation based on last block type
+      if (lastBlock.type === 'core/paragraph') {
+        // Continue with another paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      } else if (lastBlock.type === 'core/heading') {
+        // After heading, add content paragraph
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      } else if (lastBlock.type === 'core/list') {
+        // Continue list or add paragraph after list
+        const continueList = content && (content.includes('•') || content.includes('-') || /^\d+\./.test(content));
+        if (continueList) {
+          return this.addSemanticBlock(sessionManager, documentHandle, 'list', content);
+        } else {
+          return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+        }
+      } else {
+        // Default to paragraph for other types
+        return this.addSemanticBlock(sessionManager, documentHandle, 'paragraph', content);
+      }
+    } catch (error) {
+      throw new Error(`Failed to continue writing: ${error.message}`);
     }
   }
 

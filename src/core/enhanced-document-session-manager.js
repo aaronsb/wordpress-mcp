@@ -117,11 +117,23 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
    */
   async insertBlock(handle, params) {
     const blockSession = this.getBlockSession(handle);
+    
+    // Build attributes object from both params.attributes and individual attribute parameters
+    let attributes = params.attributes || {};
+    
+    // Handle individual attribute parameters (like level, align, etc.)
+    const attributeParams = ['level', 'align', 'ordered', 'reversed', 'start', 'fontSize', 'textColor', 'backgroundColor', 'dropCap'];
+    for (const attr of attributeParams) {
+      if (params[attr] !== undefined) {
+        attributes[attr] = params[attr];
+      }
+    }
+    
     return await blockSession.insertBlock(
       params.type,
       params.content,
       params.position,
-      params.attributes,
+      attributes,
       params.validateImmediately !== false
     );
   }
@@ -156,6 +168,26 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
   async getDocumentContent(handle) {
     const blockSession = this.getBlockSession(handle);
     return blockSession.blocksToHtml();
+  }
+
+  /**
+   * Get content and metadata for sync to WordPress (blocks format)
+   */
+  async getContentForSync(handle) {
+    const blockSession = this.getBlockSession(handle);
+    const session = this.sessions.get(handle);
+    
+    if (!session) {
+      throw new Error(`Session ${handle} not found`);
+    }
+    
+    return {
+      contentId: session.contentId,
+      contentType: session.contentType, 
+      content: blockSession.blocksToHtml(),
+      metadata: session.metadata,
+      hasChanges: blockSession.getChanges().total > 0
+    };
   }
 
   /**
