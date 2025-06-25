@@ -131,14 +131,20 @@ export class FeatureMapper {
       }
     });
 
-    // Pull for Editing - fetch post into editing session (filesystem abstracted)
+    // Pull for Editing - fetch post or page into editing session (filesystem abstracted)
     this.featureMap.set('pull-for-editing', {
       name: 'Pull for Editing',
-      description: 'Fetch a WordPress post into an editing session',
+      description: 'Fetch a WordPress post or page into an editing session',
       inputSchema: {
         type: 'object',
         properties: {
-          postId: { type: 'number', description: 'ID of the post to pull for editing' },
+          postId: { type: 'number', description: 'ID of the post or page to pull for editing' },
+          type: { 
+            type: 'string', 
+            enum: ['post', 'page'], 
+            default: 'post',
+            description: 'Type of content to pull (post or page)' 
+          },
         },
         required: ['postId'],
       },
@@ -940,25 +946,47 @@ export class FeatureMapper {
 
   async pullForEditing(params) {
     try {
-      // Fetch the post from WordPress
-      const post = await this.wpClient.getPost(params.postId);
+      const contentType = params.type || 'post';
+      
+      // Fetch the content from WordPress based on type
+      const content = contentType === 'page' 
+        ? await this.wpClient.getPage(params.postId)
+        : await this.wpClient.getPost(params.postId);
       
       // Format content with metadata header
-      const content = this.formatPostForEditing(post);
+      const formattedContent = contentType === 'page'
+        ? this.formatPageForEditing(content)
+        : this.formatPostForEditing(content);
       
       // Create editing session (filesystem abstracted)
       const session = await this.sessionManager.createSession(
         params.postId, 
-        content, 
+        formattedContent, 
         {
-          title: post.title.rendered,
-          status: post.status
+          title: content.title.rendered,
+          status: content.status,
+          type: contentType,
+          // Page-specific metadata
+          ...(contentType === 'page' && {
+            parent: content.parent,
+            menu_order: content.menu_order,
+            template: content.template
+          })
         }
       );
 
-      return session;
+      // Add semantic context to the response
+      return {
+        ...session,
+        semanticContext: {
+          contentType: contentType,
+          hint: contentType === 'page' 
+            ? 'This is a PAGE - use it for permanent, timeless content that forms your site structure'
+            : 'This is a POST - use it for time-based content like news, articles, or blog entries'
+        }
+      };
     } catch (error) {
-      throw new Error(`Failed to pull post for editing: ${error.message}`);
+      throw new Error(`Failed to pull ${params.type || 'post'} for editing: ${error.message}`);
     }
   }
 
@@ -967,7 +995,10 @@ export class FeatureMapper {
       // Get document content using session manager (filesystem abstracted)
       const content = await this.sessionManager.getDocumentContent(params.documentHandle);
       
-      // Parse the content to extract metadata and post content
+      // Check if it's a page or post
+      const isPage = content.includes('**Page Metadata:**');
+      
+      // Parse the content to extract metadata and content
       const { postId, metadata, postContent } = this.parseEditedFile(content);
 
       // Prepare update data
@@ -977,12 +1008,23 @@ export class FeatureMapper {
 
       // Add metadata if present
       if (metadata.title) updateData.title = { raw: metadata.title };
-      if (metadata.excerpt) updateData.excerpt = { raw: metadata.excerpt };
-      if (metadata.categories) updateData.categories = await this.resolveCategories(metadata.categories);
-      if (metadata.tags) updateData.tags = await this.resolveTags(metadata.tags);
+      
+      if (isPage) {
+        // Page-specific metadata
+        if (metadata.parent !== undefined) updateData.parent = metadata.parent;
+        if (metadata.menu_order !== undefined) updateData.menu_order = metadata.menu_order;
+        if (metadata.template) updateData.template = metadata.template;
+      } else {
+        // Post-specific metadata
+        if (metadata.excerpt) updateData.excerpt = { raw: metadata.excerpt };
+        if (metadata.categories) updateData.categories = await this.resolveCategories(metadata.categories);
+        if (metadata.tags) updateData.tags = await this.resolveTags(metadata.tags);
+      }
 
-      // Update the post
-      const updatedPost = await this.wpClient.updatePost(postId, updateData);
+      // Update the content
+      const updatedContent = isPage 
+        ? await this.wpClient.updatePage(postId, updateData)
+        : await this.wpClient.updatePost(postId, updateData);
 
       // Close session if requested (default: true)
       if (params.closeSession !== false) {
@@ -991,12 +1033,18 @@ export class FeatureMapper {
 
       return {
         success: true,
-        postId: postId,
-        title: updatedPost.title.rendered,
-        status: updatedPost.status,
+        [`${isPage ? 'page' : 'post'}Id`]: postId,
+        title: updatedContent.title.rendered,
+        status: updatedContent.status,
         documentHandle: params.documentHandle,
         sessionClosed: params.closeSession !== false,
-        message: `Post synced to WordPress successfully`,
+        message: `${isPage ? 'Page' : 'Post'} synced to WordPress successfully`,
+        semanticContext: {
+          contentType: isPage ? 'page' : 'post',
+          hint: isPage 
+            ? 'Page updated - remember pages are for static, timeless content'
+            : 'Post updated - posts are for time-based content like news or articles'
+        }
       };
     } catch (error) {
       throw new Error(`Failed to sync to WordPress: ${error.message}`);
@@ -1027,9 +1075,32 @@ ${cleanContent}
 - Excerpt: ${cleanExcerpt}`;
   }
 
+  formatPageForEditing(page) {
+    // Convert WordPress HTML to clean markdown for AI editing
+    const cleanTitle = this.sessionManager.htmlToMarkdown(page.title.rendered);
+    const cleanContent = this.sessionManager.htmlToMarkdown(page.content.rendered);
+
+    return `# ${cleanTitle}
+
+${cleanContent}
+
+----
+**Page Metadata:**
+- Page ID: ${page.id}
+- Status: ${page.status}
+- Parent Page: ${page.parent || 'None'}
+- Menu Order: ${page.menu_order}
+- Template: ${page.template || 'default'}
+- Type: Static Page (not a blog post)`;
+  }
+
   parseEditedFile(content) {
+    // Check if it's a post or page by looking for metadata section
+    const isPage = content.includes('**Page Metadata:**');
+    const metadataMarker = isPage ? '**Page Metadata:**' : '**Post Metadata:**';
+    
     // Split content at the metadata divider
-    const parts = content.split('---\n**Post Metadata:**');
+    const parts = content.split(`----\n${metadataMarker}`);
     
     if (parts.length !== 2) {
       throw new Error('Invalid temp file format - missing metadata section');
@@ -1038,12 +1109,13 @@ ${cleanContent}
     const postContent = parts[0].trim();
     const metadataSection = parts[1];
 
-    // Extract post ID from metadata
-    const postIdMatch = metadataSection.match(/- Post ID: (\d+)/);
-    if (!postIdMatch) {
-      throw new Error('Could not find Post ID in temp file');
+    // Extract ID from metadata (works for both posts and pages)
+    const idPattern = isPage ? /- Page ID: (\d+)/ : /- Post ID: (\d+)/;
+    const idMatch = metadataSection.match(idPattern);
+    if (!idMatch) {
+      throw new Error(`Could not find ${isPage ? 'Page' : 'Post'} ID in temp file`);
     }
-    const postId = parseInt(postIdMatch[1]);
+    const postId = parseInt(idMatch[1]);
 
     // Extract title (first line should be # Title)
     const titleMatch = postContent.match(/^# (.+)$/m);
@@ -1073,6 +1145,24 @@ ${cleanContent}
     const tagsMatch = metadataSection.match(/- Tags: (.+)/);
     if (tagsMatch && tagsMatch[1].trim() !== '') {
       metadata.tags = tagsMatch[1].split(', ').map(tag => tag.trim());
+    }
+
+    // Page-specific metadata
+    if (isPage) {
+      const parentMatch = metadataSection.match(/- Parent Page: (\d+|None)/);
+      if (parentMatch && parentMatch[1] !== 'None') {
+        metadata.parent = parseInt(parentMatch[1]);
+      }
+      
+      const menuOrderMatch = metadataSection.match(/- Menu Order: (\d+)/);
+      if (menuOrderMatch) {
+        metadata.menu_order = parseInt(menuOrderMatch[1]);
+      }
+      
+      const templateMatch = metadataSection.match(/- Template: (.+)/);
+      if (templateMatch && templateMatch[1] !== 'default') {
+        metadata.template = templateMatch[1];
+      }
     }
 
     const excerptMatch = metadataSection.match(/- Excerpt: (.+)/);
