@@ -49,10 +49,11 @@ export default {
 
         switch (params.operation) {
           case 'trash':
+            // Use DELETE method without force parameter to move to trash
             if (contentType === 'post') {
-              result = await wpClient.updatePost(contentId, { status: 'trash' });
+              result = await wpClient.deletePost(contentId, false); // false = don't force delete, just trash
             } else {
-              result = await wpClient.updatePage(contentId, { status: 'trash' });
+              result = await wpClient.deletePage(contentId, false); // false = don't force delete, just trash
             }
             break;
 

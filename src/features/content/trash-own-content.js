@@ -55,11 +55,12 @@ export default {
       }
 
       // User owns the content, proceed with trashing
+      // Use DELETE method without force parameter to move to trash
       let result;
       if (contentType === 'post') {
-        result = await wpClient.updatePost(contentId, { status: 'trash' });
+        result = await wpClient.deletePost(contentId, false); // false = don't force delete, just trash
       } else {
-        result = await wpClient.updatePage(contentId, { status: 'trash' });
+        result = await wpClient.deletePage(contentId, false); // false = don't force delete, just trash
       }
 
       return {
