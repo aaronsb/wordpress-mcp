@@ -754,12 +754,56 @@ export class FeatureMapper {
 
   // Implementation methods for semantic operations
   
+  convertToBlockFormat(content) {
+    // If content is already in block format, return as-is
+    if (content.includes('<!-- wp:')) {
+      return content;
+    }
+    
+    // Split content into paragraphs
+    const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+    
+    // Convert each paragraph to a Gutenberg block
+    const blocks = paragraphs.map(paragraph => {
+      paragraph = paragraph.trim();
+      
+      // Check for headings (markdown style)
+      const headingMatch = paragraph.match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const text = headingMatch[2];
+        return `<!-- wp:heading {"level":${level}} -->\n<h${level}>${text}</h${level}>\n<!-- /wp:heading -->`;
+      }
+      
+      // Check for lists
+      if (paragraph.match(/^[\*\-]\s+/m) || paragraph.match(/^\d+\.\s+/m)) {
+        const isOrdered = paragraph.match(/^\d+\.\s+/m) !== null;
+        const listItems = paragraph.split('\n').map(item => {
+          return item.replace(/^[\*\-]\s+/, '').replace(/^\d+\.\s+/, '');
+        }).filter(item => item.trim());
+        
+        const listTag = isOrdered ? 'ol' : 'ul';
+        const listContent = listItems.map(item => `<li>${item}</li>`).join('\n');
+        
+        return `<!-- wp:list${isOrdered ? ' {"ordered":true}' : ''} -->\n<${listTag}>\n${listContent}\n</${listTag}>\n<!-- /wp:list -->`;
+      }
+      
+      // Default to paragraph
+      return `<!-- wp:paragraph -->\n<p>${paragraph}</p>\n<!-- /wp:paragraph -->`;
+    });
+    
+    return blocks.join('\n\n');
+  }
+  
   async createDraftArticle(params) {
     try {
+      // Convert plain content to Gutenberg block format
+      const blockContent = this.convertToBlockFormat(params.content);
+      
       // Prepare the base post data
       const postData = {
         title: { raw: params.title },
-        content: { raw: params.content },
+        content: { raw: blockContent },
         status: 'draft',
         excerpt: params.excerpt ? { raw: params.excerpt } : undefined,
       };
@@ -821,9 +865,12 @@ export class FeatureMapper {
         }
       }
 
+      // Convert plain content to Gutenberg block format
+      const blockContent = this.convertToBlockFormat(params.content);
+      
       const postData = {
         title: { raw: params.title },
-        content: { raw: params.content },
+        content: { raw: blockContent },
         status: 'publish',
         excerpt: params.excerpt ? { raw: params.excerpt } : undefined,
         featured_media: featuredMediaId,
