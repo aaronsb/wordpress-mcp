@@ -300,6 +300,11 @@ class WordPressAuthorMCP {
   }
 }
 
-// Start the server
-const server = new WordPressAuthorMCP();
-server.run().catch(console.error);
+// Export for testing
+export { WordPressAuthorMCP };
+
+// Start the server if run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const server = new WordPressAuthorMCP();
+  server.run().catch(console.error);
+}

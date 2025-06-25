@@ -7,6 +7,8 @@
  */
 
 import { DocumentSessionManager } from './document-session-manager.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export class FeatureMapper {
   constructor(wpClient) {
@@ -62,7 +64,7 @@ export class FeatureMapper {
         properties: {
           action: {
             type: 'string',
-            enum: ['draft', 'publish', 'edit', 'pull', 'sync', 'trash', 'page'],
+            enum: ['draft', 'publish', 'edit', 'pull', 'sync', 'trash', 'page', 'markdown-to-wp', 'bulk'],
             description: 'Content management action to perform'
           },
           // Common properties
@@ -80,7 +82,20 @@ export class FeatureMapper {
           closeSession: { type: 'boolean', description: 'Close session after sync' },
           // Publish options
           featuredImageUrl: { type: 'string', description: 'Featured image URL' },
-          status: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'Publish status' }
+          status: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'Publish status' },
+          // Markdown import specific
+          filePath: { 
+            oneOf: [
+              { type: 'string', description: 'Single file/directory path' },
+              { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Array of file/directory paths' }
+            ], 
+            description: 'Path(s) to markdown files or directories (for markdown-to-wp action)' 
+          },
+          recurse: { type: 'boolean', description: 'Recursively process subdirectories (only valid for directories with type="page")' },
+          // Bulk operations specific
+          operation: { type: 'string', enum: ['trash', 'delete', 'change_status'], description: 'Bulk operation type (for bulk action)' },
+          contentIds: { type: 'array', items: { type: 'number' }, description: 'Array of content IDs to operate on (for bulk action)' },
+          newStatus: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'New status for change_status operation' }
         },
         required: ['action']
       },
@@ -141,6 +156,7 @@ export class FeatureMapper {
           query: { type: 'string', description: 'Search terms' },
           intent: { type: 'string', enum: ['edit', 'review', 'publish', 'comment', 'any'] },
           status: { type: 'string', enum: ['publish', 'draft', 'private', 'pending', 'future', 'any'] },
+          contentType: { type: 'string', enum: ['post', 'page', 'any'], description: 'Type of content to search (default: any)' },
           page: { type: 'number', description: 'Page number' },
           perPage: { type: 'number', description: 'Results per page' },
           postId: { type: 'number', description: 'Post ID' },
@@ -232,6 +248,10 @@ export class FeatureMapper {
         return this.createPage(params);
       case 'trash':
         return this.trashContent(params);
+      case 'markdown-to-wp':
+        return this.markdownToWordPress(params);
+      case 'bulk':
+        return this.bulkContentOperations(params);
       default:
         throw new Error(`Unknown content action: ${params.action}`);
     }
@@ -254,6 +274,11 @@ export class FeatureMapper {
       case 'edit':
         return sessionManager.editBlock(params.documentHandle, params.blockId, params);
       case 'insert':
+        // Check if this is a semantic type pattern
+        if (params.type && params.type.startsWith('semantic-')) {
+          const semanticType = params.type.replace('semantic-', '');
+          return this.addSemanticBlock(sessionManager, params.documentHandle, semanticType, params.content);
+        }
         return sessionManager.insertBlock(params.documentHandle, params);
       case 'delete':
         return sessionManager.deleteBlock(params.documentHandle, params.blockId);
@@ -393,6 +418,334 @@ export class FeatureMapper {
     }
 
     return groups;
+  }
+
+  async trashContent(params) {
+    try {
+      const { postId, contentType = 'post' } = params;
+      
+      // Use the existing trash-own-content feature logic
+      const currentUser = await this.wpClient.request('/users/me');
+      const currentUserId = currentUser.id;
+
+      // Get the content to check ownership
+      let content;
+      if (contentType === 'post') {
+        content = await this.wpClient.getPost(postId);
+      } else {
+        content = await this.wpClient.getPage(postId);
+      }
+
+      // Check if user owns the content (for non-administrators)
+      if (content.author !== currentUserId) {
+        return {
+          success: false,
+          error: 'Permission denied',
+          message: `You can only trash your own ${contentType}s. This ${contentType} belongs to another author.`
+        };
+      }
+
+      // User owns the content, proceed with trashing
+      let result;
+      if (contentType === 'post') {
+        result = await this.wpClient.deletePost(postId, false); // false = don't force delete, just trash
+      } else {
+        result = await this.wpClient.deletePage(postId, false); // false = don't force delete, just trash
+      }
+
+      return {
+        success: true,
+        contentId: postId,
+        contentType,
+        title: result.title?.rendered || result.title?.raw || `${contentType} ${postId}`,
+        message: `Successfully moved ${contentType} "${result.title?.rendered || result.title?.raw}" to trash`,
+        hint: `To restore this ${contentType}, an editor or administrator can help, or you can restore it from the WordPress admin panel.`
+      };
+
+    } catch (error) {
+      // Handle specific WordPress errors
+      if (error.code === 'rest_post_invalid_id' || error.code === 'rest_page_invalid_id') {
+        return {
+          success: false,
+          error: 'Not found',
+          message: `${params.contentType || 'post'} with ID ${params.postId} not found`
+        };
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Failed to trash content',
+        message: `Could not move ${params.contentType || 'post'} to trash. ${error.data?.message || error.message || ''}`
+      };
+    }
+  }
+
+  async markdownToWordPress(params) {
+    try {
+      const { filePath, type = 'post', title, parent, recurse = false } = params;
+      
+      // Validate recurse option - only allowed with type="page" and directory input
+      if (recurse && type !== 'page') {
+        throw new Error('Recursive import is only allowed for pages (type="page")');
+      }
+      
+      // Get list of markdown files to process
+      const markdownFiles = this.resolveMarkdownFiles(filePath, recurse);
+      
+      if (markdownFiles.length === 0) {
+        throw new Error('No markdown files found matching the specified path(s)');
+      }
+
+      const results = [];
+      const errors = [];
+
+      if (recurse && type === 'page') {
+        // Recursive processing with parent-child hierarchy
+        const pageHierarchy = await this.processMarkdownHierarchy(markdownFiles, parent);
+        results.push(...pageHierarchy.results);
+        errors.push(...pageHierarchy.errors);
+      } else {
+        // Normal processing - flat structure
+        for (const fileInfo of markdownFiles) {
+          try {
+            // Handle both string paths and file info objects
+            const filePath = typeof fileInfo === 'string' ? fileInfo : fileInfo.fullPath;
+            const result = await this.processMarkdownFile(filePath, { type, title, parent });
+            results.push(result);
+          } catch (error) {
+            errors.push({
+              file: typeof fileInfo === 'string' ? fileInfo : fileInfo.fullPath,
+              error: error.message
+            });
+          }
+        }
+      }
+
+      // Return results summary
+      if (results.length === 1 && errors.length === 0) {
+        // Single file success - return simple result
+        return results[0];
+      }
+
+      return {
+        success: errors.length === 0,
+        processed: results.length + errors.length,
+        successful: results.length,
+        failed: errors.length,
+        results,
+        errors,
+        message: `Processed ${markdownFiles.length} markdown files: ${results.length} successful, ${errors.length} failed`,
+        hint: errors.length > 0 ? 'Check errors array for details on failed conversions' : 'All files converted successfully'
+      };
+
+    } catch (error) {
+      throw new Error(`Failed to convert markdown to WordPress: ${error.message}`);
+    }
+  }
+
+  resolveMarkdownFiles(filePath, recurse = false) {
+    
+    let pathsToProcess = Array.isArray(filePath) ? filePath : [filePath];
+    const markdownFiles = [];
+
+    for (let inputPath of pathsToProcess) {
+      // Validate path against allowed patterns
+      if (!this.isPathAllowed(inputPath)) {
+        throw new Error(`Access denied: Path not in allowed locations: ${inputPath}`);
+      }
+
+      if (!fs.existsSync(inputPath)) {
+        throw new Error(`Path not found: ${inputPath}`);
+      }
+
+      const stat = fs.statSync(inputPath);
+      
+      if (stat.isFile()) {
+        // Single file - check if it's markdown
+        if (this.isMarkdownFile(inputPath)) {
+          markdownFiles.push(inputPath);
+        }
+      } else if (stat.isDirectory()) {
+        // Directory - find all markdown files
+        if (recurse) {
+          // Recursive processing - collect files with their directory structure
+          this.collectMarkdownFilesRecursive(inputPath, inputPath, markdownFiles);
+        } else {
+          // Non-recursive - only files in this directory
+          const files = fs.readdirSync(inputPath);
+          for (const file of files) {
+            const fullPath = path.join(inputPath, file);
+            if (fs.statSync(fullPath).isFile() && this.isMarkdownFile(fullPath)) {
+              markdownFiles.push(fullPath);
+            }
+          }
+        }
+      }
+    }
+
+    return markdownFiles;
+  }
+
+  isMarkdownFile(filePath) {
+    const ext = filePath.toLowerCase().split('.').pop();
+    return ['md', 'markdown'].includes(ext);
+  }
+
+  collectMarkdownFilesRecursive(dirPath, rootPath, fileList) {
+    const files = fs.readdirSync(dirPath);
+    
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        // Recursively process subdirectories
+        this.collectMarkdownFilesRecursive(fullPath, rootPath, fileList);
+      } else if (stat.isFile() && this.isMarkdownFile(fullPath)) {
+        // Add markdown file with relative path info
+        fileList.push({
+          fullPath,
+          relativePath: path.relative(rootPath, fullPath),
+          parentDir: path.relative(rootPath, dirPath)
+        });
+      }
+    }
+  }
+
+  async processMarkdownHierarchy(fileList, rootParent) {
+    const results = [];
+    const errors = [];
+    const directoryPages = new Map(); // Track created pages for each directory
+    
+    // Sort files by depth to ensure parent directories are processed first
+    const sortedFiles = fileList.sort((a, b) => {
+      const depthA = a.relativePath.split(path.sep).length;
+      const depthB = b.relativePath.split(path.sep).length;
+      return depthA - depthB;
+    });
+
+    for (const fileInfo of sortedFiles) {
+      try {
+        let parentId = rootParent;
+        
+        // If file is in a subdirectory, ensure parent pages exist
+        if (fileInfo.parentDir) {
+          const dirParts = fileInfo.parentDir.split(path.sep);
+          let currentPath = '';
+          
+          for (const dirPart of dirParts) {
+            currentPath = currentPath ? path.join(currentPath, dirPart) : dirPart;
+            
+            if (!directoryPages.has(currentPath)) {
+              // Create a page for this directory
+              const dirTitle = dirPart.charAt(0).toUpperCase() + dirPart.slice(1).replace(/-/g, ' ');
+              const dirPage = await this.wpClient.createPage({
+                title: { raw: dirTitle },
+                content: { raw: `<p>Pages in ${dirTitle}</p>` },
+                status: 'draft',
+                parent: parentId || undefined
+              });
+              
+              directoryPages.set(currentPath, dirPage.id);
+              results.push({
+                success: true,
+                contentId: dirPage.id,
+                contentType: 'page',
+                title: dirPage.title.rendered,
+                status: dirPage.status,
+                editLink: dirPage.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
+                sourceFile: `${currentPath} (directory)`,
+                message: `Created parent page for directory: ${dirPart}`
+              });
+            }
+            
+            parentId = directoryPages.get(currentPath);
+          }
+        }
+        
+        // Process the markdown file with appropriate parent
+        const result = await this.processMarkdownFile(fileInfo.fullPath, { 
+          type: 'page', 
+          parent: parentId 
+        });
+        results.push(result);
+        
+      } catch (error) {
+        errors.push({
+          file: fileInfo.fullPath,
+          error: error.message
+        });
+      }
+    }
+    
+    return { results, errors };
+  }
+
+  async processMarkdownFile(filePath, options) {
+    const { type = 'post', title, parent } = options;
+
+    // Read markdown content
+    const markdownContent = fs.readFileSync(filePath, 'utf8');
+    
+    // Extract title from markdown if not provided
+    let extractedTitle = title;
+    if (!extractedTitle) {
+      const titleMatch = markdownContent.match(/^#\s+(.+)$/m);
+      extractedTitle = titleMatch ? titleMatch[1] : path.basename(filePath, path.extname(filePath));
+    }
+
+    // Convert markdown to HTML
+    const htmlContent = this.markdownToHtml(markdownContent);
+
+    // Create the content data
+    const contentData = {
+      title: { raw: extractedTitle },
+      content: { raw: htmlContent },
+      status: 'draft'
+    };
+
+    if (parent && type === 'page') {
+      contentData.parent = parent;
+    }
+
+    // Create the content in WordPress
+    let result;
+    if (type === 'page') {
+      result = await this.wpClient.createPage(contentData);
+    } else {
+      result = await this.wpClient.createPost(contentData);
+    }
+
+    return {
+      success: true,
+      contentId: result.id,
+      contentType: type,
+      title: result.title.rendered,
+      status: result.status,
+      editLink: result.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
+      sourceFile: filePath,
+      message: `Converted "${path.basename(filePath)}" to WordPress ${type} draft`
+    };
+  }
+
+  markdownToHtml(markdown) {
+    // Basic markdown to HTML conversion
+    // This should ideally use a proper markdown parser
+    return markdown
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+      .replace(/^\- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+      .replace(/^(.+)$/gm, '<p>$1</p>')
+      .replace(/<\/p>\s*<p>/g, '</p>\n<p>')
+      .replace(/<p><h([1-6])>/g, '<h$1>')
+      .replace(/<\/h([1-6])><\/p>/g, '</h$1>')
+      .replace(/<p><ul>/g, '<ul>')
+      .replace(/<\/ul><\/p>/g, '</ul>');
   }
   
   getOperation(name) {
@@ -591,13 +944,39 @@ export class FeatureMapper {
 
   async uploadImageFromUrl(params) {
     try {
-      const response = await fetch(params.imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
+      let imageBlob;
+      let filename;
 
-      const imageBlob = await response.blob();
-      const filename = params.imageUrl.split('/').pop() || 'uploaded-image.jpg';
+      // Check if this is a local file path
+      if (params.imageUrl.startsWith('/') || params.imageUrl.startsWith('file://') || params.imageUrl.startsWith('$')) {
+        // Handle local file upload
+        const filePath = params.imageUrl.replace('file://', '');
+        
+        // Validate against allowed paths
+        if (!this.isPathAllowed(filePath)) {
+          throw new Error(`Access denied: Path not in allowed locations`);
+        }
+
+        
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const fileBuffer = fs.readFileSync(filePath);
+        // Create a File-like object for Node.js environment
+        imageBlob = new File([fileBuffer], path.basename(filePath), {
+          type: this.getMimeType(filePath)
+        });
+        filename = path.basename(filePath);
+      } else {
+        // Handle URL upload
+        const response = await fetch(params.imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        imageBlob = await response.blob();
+        filename = params.imageUrl.split('/').pop() || 'uploaded-image.jpg';
+      }
       
       const media = await this.wpClient.uploadMedia(imageBlob, filename);
       
@@ -623,6 +1002,141 @@ export class FeatureMapper {
     } catch (error) {
       throw new Error(`Failed to upload image: ${error.message}`);
     }
+  }
+
+  expandEnvVars(str) {
+    // Replace $VAR and ${VAR} patterns with environment variables
+    return str.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+      // Handle ${VAR:-default} syntax
+      const [name, defaultValue] = varName.split(':-');
+      return process.env[name] || defaultValue || '';
+    }).replace(/\$([A-Z_][A-Z0-9_]*)/g, (match, varName) => {
+      return process.env[varName] || match;
+    });
+  }
+
+  isPathAllowed(filePath) {
+    const allowedPaths = process.env.ALLOWED_FILE_PATHS;
+    if (!allowedPaths) {
+      return false; // No local paths allowed if not configured
+    }
+
+    // Only expand env vars in the allowed patterns from config, NOT in the input path
+    const allowedPatterns = allowedPaths.split(',').map(p => this.expandEnvVars(p.trim()));
+
+    // Check if the file path starts with any allowed pattern
+    return allowedPatterns.some(pattern => {
+      return filePath.startsWith(pattern);
+    });
+  }
+
+  async bulkContentOperations(params) {
+    try {
+      const { operation, contentIds, newStatus } = params;
+      
+      // Use the existing bulk-content-operations feature logic
+      const results = [];
+      const errors = [];
+      
+      for (const contentId of contentIds) {
+        try {
+          let result;
+          let actualContentType;
+          
+          // First, try to determine the content type by attempting to fetch it
+          let isPost = false;
+          let isPage = false;
+          
+          try {
+            await this.wpClient.getPost(contentId);
+            isPost = true;
+            actualContentType = 'post';
+          } catch (e) {
+            // Not a post, try page
+            try {
+              await this.wpClient.getPage(contentId);
+              isPage = true;
+              actualContentType = 'page';
+            } catch (e2) {
+              // Neither post nor page
+              throw new Error(`Content ID ${contentId} not found as post or page`);
+            }
+          }
+          
+          switch (operation) {
+            case 'trash':
+              // Use DELETE method without force parameter to move to trash
+              if (isPost) {
+                result = await this.wpClient.deletePost(contentId, false);
+              } else {
+                result = await this.wpClient.deletePage(contentId, false);
+              }
+              break;
+              
+            case 'delete':
+              if (isPost) {
+                result = await this.wpClient.deletePost(contentId, true);
+              } else {
+                result = await this.wpClient.deletePage(contentId, true);
+              }
+              break;
+              
+            case 'change_status':
+              if (!newStatus) {
+                throw new Error('newStatus is required for change_status operation');
+              }
+              if (isPost) {
+                result = await this.wpClient.updatePost(contentId, { status: newStatus });
+              } else {
+                result = await this.wpClient.updatePage(contentId, { status: newStatus });
+              }
+              break;
+          }
+          
+          results.push({
+            contentId,
+            contentType: actualContentType,
+            success: true,
+            title: result.title?.rendered || result.title?.raw || `${actualContentType} ${contentId}`,
+          });
+        } catch (error) {
+          errors.push({
+            contentId,
+            error: error.message,
+          });
+        }
+      }
+      
+      return {
+        success: errors.length === 0,
+        operation,
+        processed: results.length + errors.length,
+        successful: results.length,
+        failed: errors.length,
+        results,
+        errors,
+        message: `Bulk ${operation} completed: ${results.length} successful, ${errors.length} failed`
+      };
+      
+    } catch (error) {
+      throw new Error(`Failed to perform bulk operation: ${error.message}`);
+    }
+  }
+
+  getMimeType(filePath) {
+    const ext = filePath.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'svg': 'image/svg+xml',
+      'md': 'text/markdown',
+      'txt': 'text/plain',
+      'pdf': 'application/pdf'
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
   }
 
   async listMedia(params) {
@@ -1162,30 +1676,50 @@ ${cleanContent}
       }
       // For 'any', don't add status filter - WordPress will return based on user permissions
       
-      // Make the API request (listPosts returns array directly)
-      const posts = await this.wpClient.listPosts(searchParams);
+      // Determine content type to search
+      const contentType = params.contentType || 'any'; // Default to 'any' to get both posts and pages
       
-      // Since listPosts doesn't return headers, we'll estimate pagination
-      // This is a limitation we'll need to address later
-      const totalItems = posts.length;
+      let allContent = [];
+      
+      // Fetch posts and/or pages based on contentType parameter
+      if (contentType === 'post' || contentType === 'any') {
+        const posts = await this.wpClient.listPosts(searchParams);
+        allContent.push(...posts.map(item => ({ ...item, type: 'post' })));
+      }
+      
+      if (contentType === 'page' || contentType === 'any') {
+        const pages = await this.wpClient.listPages(searchParams);
+        allContent.push(...pages.map(item => ({ ...item, type: 'page' })));
+      }
+      
+      // Sort all content by modified date (newest first)
+      allContent.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+      
+      // Apply pagination to combined results
+      const startIndex = (page - 1) * perPage;
+      const paginatedContent = allContent.slice(startIndex, startIndex + perPage);
+      
+      // Calculate total items and pages
+      const totalItems = allContent.length;
       const totalPages = Math.ceil(totalItems / perPage);
       
       // Format results with workflow suggestions
-      const formattedPosts = posts.map(post => {
+      const formattedContent = paginatedContent.map(item => {
         const baseInfo = {
-          id: post.id,
-          title: post.title.rendered,
-          status: post.status,
-          date: post.date,
-          modified: post.modified,
-          excerpt: post.excerpt.rendered.replace(/<[^>]*>/g, '').trim(),
-          author: post._embedded?.author?.[0]?.name || `User ${post.author}`,
-          categories: post._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [],
-          tags: post._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || []
+          id: item.id,
+          type: item.type, // 'post' or 'page'
+          title: item.title.rendered,
+          status: item.status,
+          date: item.date,
+          modified: item.modified,
+          excerpt: item.excerpt.rendered.replace(/<[^>]*>/g, '').trim(),
+          author: item._embedded?.author?.[0]?.name || `User ${item.author}`,
+          categories: item._embedded?.['wp:term']?.[0]?.map(cat => cat.name) || [],
+          tags: item._embedded?.['wp:term']?.[1]?.map(tag => tag.name) || []
         };
         
         // Add suggested actions based on status and intent
-        const suggestedActions = this.getSuggestedActions(post.status, params.intent);
+        const suggestedActions = this.getSuggestedActions(item.status, params.intent);
         
         return {
           ...baseInfo,
@@ -1194,17 +1728,18 @@ ${cleanContent}
       });
       
       // Provide workflow guidance
-      const workflowGuidance = this.getWorkflowGuidance(params.intent, formattedPosts.length, totalItems);
+      const workflowGuidance = this.getWorkflowGuidance(params.intent, formattedContent.length, totalItems);
       
       return {
         success: true,
         query: params.query || '',
         intent: params.intent || 'any',
+        contentType: contentType,
         page,
         perPage,
         totalItems,
         totalPages,
-        posts: formattedPosts,
+        posts: formattedContent, // Keep 'posts' key for backward compatibility but it contains both posts and pages
         workflowGuidance
       };
       
