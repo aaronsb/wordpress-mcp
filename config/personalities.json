@@ -47,7 +47,8 @@
       "manage-media",
       "manage-own-content",
       "draft-page",
-      "create-page"
+      "create-page",
+      "trash-own-content"
     ],
     "context": {
       "can_publish": true,
@@ -76,7 +77,8 @@
       "editorial-workflow",
       "content-planning",
       "draft-page",
-      "create-page"
+      "create-page",
+      "bulk-content-operations"
     ],
     "context": {
       "can_publish": true,
@@ -99,7 +101,8 @@
       "system-configuration",
       "advanced-settings",
       "draft-page",
-      "create-page"
+      "create-page",
+      "bulk-content-operations"
     ],
     "context": {
       "can_publish": true,

@@ -1,14 +1,19 @@
 # Feature Implementation Status
 
-## Implemented Features (19 total)
+## Implemented Features (25 total)
 
-### Content Operations
+### Content Operations - Posts
 - ✅ find-posts (semantic search with intent)
 - ✅ draft-article
 - ✅ publish-article
 - ✅ edit-draft
-- ✅ pull-for-editing
-- ✅ sync-to-wordpress
+- ✅ pull-for-editing (supports both posts and pages)
+- ✅ sync-to-wordpress (supports both posts and pages)
+- ✅ trash-own-content (move own posts/pages to trash)
+
+### Content Operations - Pages
+- ✅ draft-page (create draft pages with hierarchy)
+- ✅ create-page (publish pages with parent/child support)
 
 ### Document Editing
 - ✅ read-document
@@ -26,10 +31,11 @@
 - ✅ upload-featured-image
 - ✅ manage-media
 
-### Moderation
+### Moderation & Management
 - ✅ review-content
 - ✅ moderate-comments
 - ✅ manage-categories
+- ✅ bulk-content-operations (trash, restore, delete, change status for posts/pages)
 
 ## Missing Features by Role
 
@@ -60,6 +66,28 @@
 ### Subscriber (2 missing - all placeholder)
 - ❌ view-content
 - ❌ manage-profile
+
+## Recent Additions
+
+### Trash Operations (Current Branch - feature/trash-operations)
+- Added trash-own-content feature for authors (posts and pages)
+- Extended bulk-content-operations to support pages
+- Added bulk-content-operations to editor and administrator personalities
+- Fixed WordPress REST API trash status issue:
+  - Uses DELETE method instead of status update (WordPress doesn't accept 'trash' as status)
+  - DELETE without force=true moves to trash
+  - DELETE with force=true permanently deletes
+- Includes ownership verification in trash-own-content
+- Bulk operations support: trash, restore, delete, change status
+- Separate contentType parameter for posts vs pages
+
+### Page Support (PR #1)
+- Added complete page creation and editing functionality
+- Extended pull-for-editing and sync-to-wordpress for pages
+- Clear semantic distinction between posts and pages
+- Support for page hierarchy (parent-child relationships)
+- Page-specific metadata (menu order, templates)
+- Fixed HTML encoding issues in titles
 
 ## Priority Implementation Order
 
