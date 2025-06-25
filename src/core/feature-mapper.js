@@ -55,7 +55,7 @@ export class FeatureMapper {
 
   createContentManagementTool() {
     this.featureMap.set('content-management', {
-      name: 'Content Management',
+      name: 'content-management',
       description: '[Content Management] Create, edit, and manage posts and pages',
       inputSchema: {
         type: 'object',
@@ -92,7 +92,7 @@ export class FeatureMapper {
 
   createBlockEditorTool() {
     this.featureMap.set('block-editor', {
-      name: 'Block Editor',
+      name: 'block-editor',
       description: '[Block Editor] Edit content using WordPress blocks',
       inputSchema: {
         type: 'object',
@@ -123,7 +123,7 @@ export class FeatureMapper {
 
   createPublishingWorkflowTool() {
     this.featureMap.set('publishing-workflow', {
-      name: 'Publishing Workflow',
+      name: 'publishing-workflow',
       description: '[Publishing Workflow] Review, approve, and publish content',
       inputSchema: {
         type: 'object',
@@ -153,7 +153,7 @@ export class FeatureMapper {
 
   createMediaManagementTool() {
     this.featureMap.set('media-management', {
-      name: 'Media Management',
+      name: 'media-management',
       description: '[Media Management] Upload and manage media files',
       inputSchema: {
         type: 'object',
@@ -180,7 +180,7 @@ export class FeatureMapper {
 
   createSiteAdministrationTool() {
     this.featureMap.set('site-administration', {
-      name: 'Site Administration',
+      name: 'site-administration',
       description: '[Site Administration] Manage categories, users, and settings',
       inputSchema: {
         type: 'object',
