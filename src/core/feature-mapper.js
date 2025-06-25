@@ -1133,8 +1133,8 @@ ${cleanContent}
     // Parse optional metadata
     const metadata = {};
     if (title) {
-      // Convert title markdown to HTML if needed
-      metadata.title = this.sessionManager.markdownToHtml(title);
+      // Title should be plain text, not HTML
+      metadata.title = title;
     }
 
     const categoriesMatch = metadataSection.match(/- Categories: (.+)/);
@@ -1167,8 +1167,8 @@ ${cleanContent}
 
     const excerptMatch = metadataSection.match(/- Excerpt: (.+)/);
     if (excerptMatch && excerptMatch[1].trim() !== '') {
-      // Convert excerpt markdown to HTML if needed
-      metadata.excerpt = this.sessionManager.markdownToHtml(excerptMatch[1]);
+      // Excerpt should be plain text, not HTML
+      metadata.excerpt = excerptMatch[1];
     }
 
     return {
