@@ -8,12 +8,19 @@
 import { DocumentSessionManager } from './document-session-manager.js';
 import { BlockDocumentSession } from './block-document-session.js';
 import { BlockConverter } from './block-converter.js';
-import blocksConfig from '../../config/blocks.json' assert { type: 'json' };
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const blocksConfig = JSON.parse(readFileSync(join(__dirname, '../../config/blocks.json'), 'utf8'));
 
 export class EnhancedDocumentSessionManager extends DocumentSessionManager {
-  constructor() {
+  constructor(wpClient) {
     super();
     
+    this.wpClient = wpClient;
     // Block-specific state
     this.blockSessions = new Map(); // handle -> BlockDocumentSession
     this.blockConverter = new BlockConverter();
@@ -31,7 +38,7 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
       handle,
       contentType,
       contentId,
-      metadata.wpClient
+      this.wpClient
     );
     
     await blockSession.initialize(content, metadata);

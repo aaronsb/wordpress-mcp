@@ -111,8 +111,9 @@ export class ToolInjector {
       handler: async (params) => {
         try {
           const result = await feature.execute(params, {
-            wpClient: this.featureRegistry.wpClient,
+            wpClient: this.server.wpClient,
             server: this.server,
+            documentSessionManager: this.server.documentSessionManager,
           });
 
           // Handle WordPress permission errors gracefully

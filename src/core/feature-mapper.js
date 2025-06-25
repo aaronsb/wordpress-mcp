@@ -220,9 +220,9 @@ export class FeatureMapper {
       case 'edit':
         return this.editDraft(params);
       case 'pull':
-        return this.pullForEditing(params);
+        return this.pullForEditing(params, context);
       case 'sync':
-        return this.syncToWordPress(params);
+        return this.syncToWordPress(params, context);
       case 'page':
         return this.createPage(params);
       case 'trash':
@@ -786,28 +786,25 @@ export class FeatureMapper {
 
   // Temp file workflow methods
 
-  async pullForEditing(params) {
+  async pullForEditing(params, context) {
     try {
+      const { documentSessionManager } = context;
+      const wpClient = context.wpClient || this.wpClient;
       const contentType = params.type || 'post';
       
       // Fetch the content from WordPress based on type
       const content = contentType === 'page' 
-        ? await this.wpClient.getPage(params.postId)
-        : await this.wpClient.getPost(params.postId);
+        ? await wpClient.getPage(params.postId)
+        : await wpClient.getPost(params.postId);
       
-      // Format content with metadata header
-      const formattedContent = contentType === 'page'
-        ? this.formatPageForEditing(content)
-        : this.formatPostForEditing(content);
-      
-      // Create editing session (filesystem abstracted)
-      const session = await this.sessionManager.createSession(
+      // Create editing session with blocks using the enhanced session manager
+      const session = await documentSessionManager.createSession(
         params.postId, 
-        formattedContent, 
+        content.content.raw || content.content.rendered,
         {
           title: content.title.rendered,
           status: content.status,
-          type: contentType,
+          contentType: contentType,
           // Page-specific metadata
           ...(contentType === 'page' && {
             parent: content.parent,
@@ -832,10 +829,12 @@ export class FeatureMapper {
     }
   }
 
-  async syncToWordPress(params) {
+  async syncToWordPress(params, context) {
     try {
+      const { wpClient, documentSessionManager } = context;
+      
       // Get document content using session manager (filesystem abstracted)
-      const content = await this.sessionManager.getDocumentContent(params.documentHandle);
+      const content = await documentSessionManager.getDocumentContent(params.documentHandle);
       
       // Check if it's a page or post
       const isPage = content.includes('**Page Metadata:**');
@@ -865,12 +864,12 @@ export class FeatureMapper {
 
       // Update the content
       const updatedContent = isPage 
-        ? await this.wpClient.updatePage(postId, updateData)
-        : await this.wpClient.updatePost(postId, updateData);
+        ? await wpClient.updatePage(postId, updateData)
+        : await wpClient.updatePost(postId, updateData);
 
       // Close session if requested (default: true)
       if (params.closeSession !== false) {
-        await this.sessionManager.closeSession(params.documentHandle);
+        await documentSessionManager.closeSession(params.documentHandle);
       }
 
       return {
