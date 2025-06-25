@@ -1574,10 +1574,17 @@ ${cleanContent}
     const metadataMarker = isPage ? '**Page Metadata:**' : '**Post Metadata:**';
     
     // Split content at the metadata divider
-    const parts = content.split(`----\n${metadataMarker}`);
+    const parts = content.split(`---\n${metadataMarker}`);
     
     if (parts.length !== 2) {
-      throw new Error('Invalid temp file format - missing metadata section');
+      // Try alternative divider format
+      const altParts = content.split(`----\n${metadataMarker}`);
+      if (altParts.length === 2) {
+        parts[0] = altParts[0];
+        parts[1] = altParts[1];
+      } else {
+        throw new Error('Invalid temp file format - missing metadata section. Expected "---" divider before metadata.');
+      }
     }
 
     const postContent = parts[0].trim();
