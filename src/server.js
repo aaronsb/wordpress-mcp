@@ -78,29 +78,15 @@ class WordPressAuthorMCP {
     // Get grouped semantic operations from FeatureMapper
     this.semanticGroups = this.featureMapper.getGroupedSemanticOperations();
     
-    // Flatten tools for MCP registration but preserve grouping metadata
-    this.tools = [];
-    for (const [groupKey, group] of Object.entries(this.semanticGroups)) {
-      for (const operation of group.operations) {
-        this.tools.push(this.createToolFromOperation(operation));
-      }
-    }
+    // Get personality-filtered tools from the tool injector
+    this.tools = this.toolInjector.getToolsForPersonality(personalityName, this.semanticGroups);
     
-    // Get personality-based tools (for features not covered by semantic ops)
-    const personalityTools = this.toolInjector.getToolsForPersonality(personalityName);
-    
-    // Add personality tools that aren't already in semantic operations
-    const additionalTools = personalityTools.filter(t => 
-      !this.tools.some(st => st.name === t.name)
-    );
-    this.tools.push(...additionalTools);
-    
-    // Log grouped structure
-    console.error(`Loaded semantic operations in ${Object.keys(this.semanticGroups).length} groups:`);
-    for (const [groupKey, group] of Object.entries(this.semanticGroups)) {
-      console.error(`  ${group.name}: ${group.operations.length} operations`);
-    }
-    console.error(`Total: ${this.tools.length} tools for ${personalityName} personality`);
+    // Log personality-filtered tools
+    console.error(`Loaded ${this.tools.length} tools for ${personalityName} personality:`);
+    this.tools.forEach(tool => {
+      const actions = tool.inputSchema?.properties?.action?.enum || ['N/A'];
+      console.error(`  ${tool.name}: [${actions.join(', ')}]`);
+    });
   }
 
   createToolFromOperation(operation) {

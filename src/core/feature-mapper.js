@@ -24,11 +24,12 @@ export class FeatureMapper {
   }
 
   mapSemanticOperations() {
-    // Create all semantic operations
-    this.createPostOperations();
-    this.createBlockOperations();
-    this.createMediaOperations();
-    this.createUserOperations();
+    // Create the 5 unified semantic tools with action-based routing
+    this.createContentManagementTool();
+    this.createBlockEditorTool();
+    this.createPublishingWorkflowTool();
+    this.createMediaManagementTool();
+    this.createSiteAdministrationTool();
   }
 
   groupFeaturesByType(features) {
@@ -52,49 +53,267 @@ export class FeatureMapper {
     return grouped;
   }
 
-  createPostOperations() {
-    // Draft Article - combines post creation with proper status
-    this.featureMap.set('draft-article', {
-        name: 'Draft Article',
-        description: 'Create a draft article with categories and tags',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Article title' },
-            content: { type: 'string', description: 'Article content' },
-            excerpt: { type: 'string', description: 'Brief summary' },
-            categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
+  createContentManagementTool() {
+    this.featureMap.set('content-management', {
+      name: 'Content Management',
+      description: '[Content Management] Create, edit, and manage posts and pages',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['draft', 'publish', 'edit', 'pull', 'sync', 'trash', 'page'],
+            description: 'Content management action to perform'
           },
-          required: ['title', 'content'],
+          // Common properties
+          postId: { type: 'number', description: 'Post/page ID (for edit, pull, sync, trash)' },
+          title: { type: 'string', description: 'Title' },
+          content: { type: 'string', description: 'Content' },
+          excerpt: { type: 'string', description: 'Brief summary' },
+          categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
+          // Page-specific
+          type: { type: 'string', enum: ['post', 'page'], description: 'Content type' },
+          parent: { type: 'number', description: 'Parent page ID' },
+          // Pull/sync specific
+          documentHandle: { type: 'string', description: 'Document handle for sync' },
+          closeSession: { type: 'boolean', description: 'Close session after sync' },
+          // Publish options
+          featuredImageUrl: { type: 'string', description: 'Featured image URL' },
+          status: { type: 'string', enum: ['draft', 'publish', 'private'], description: 'Publish status' }
         },
-        execute: async (params) => {
-          return this.createDraftArticle(params);
-        }
-      });
+        required: ['action']
+      },
+      execute: async (params, context) => {
+        return this.executeContentAction(params, context);
+      }
+    });
+  }
 
-    // Publish Article - creates and publishes in one go
-    this.featureMap.set('publish-article', {
-        name: 'Publish Article',
-        description: 'Create and publish an article immediately with all metadata',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Article title' },
-            content: { type: 'string', description: 'Article content' },
-            excerpt: { type: 'string', description: 'Brief summary' },
-            featuredImageUrl: { type: 'string', description: 'URL of featured image to upload' },
-            categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
+  createBlockEditorTool() {
+    this.featureMap.set('block-editor', {
+      name: 'Block Editor',
+      description: '[Block Editor] Edit content using WordPress blocks',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['list', 'read', 'edit', 'insert', 'delete', 'reorder', 'validate'],
+            description: 'Block editing action to perform'
           },
-          required: ['title', 'content'],
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          blockId: { type: 'string', description: 'Block ID' },
+          type: { type: 'string', description: 'Block type (for insert)' },
+          content: { type: 'string', description: 'Block content' },
+          position: { type: 'number', description: 'Position for insert/reorder' },
+          newPosition: { type: 'number', description: 'New position for reorder' },
+          attributes: { type: 'object', description: 'Block attributes' },
+          filter: { type: 'object', description: 'Filters for list action' },
+          blocks: { type: 'array', description: 'Specific blocks to validate' },
+          validateImmediately: { type: 'boolean', default: true }
         },
-        execute: async (params) => {
-          return this.publishArticle(params);
-        }
-      });
+        required: ['action', 'documentHandle']
+      },
+      execute: async (params, context) => {
+        return this.executeBlockAction(params, context);
+      }
+    });
+  }
 
-    // Edit Draft - semantic editing of existing drafts
+  createPublishingWorkflowTool() {
+    this.featureMap.set('publishing-workflow', {
+      name: 'Publishing Workflow',
+      description: '[Publishing Workflow] Review, approve, and publish content',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['find', 'submit', 'publish', 'feedback'],
+            description: 'Workflow action to perform'
+          },
+          query: { type: 'string', description: 'Search terms' },
+          intent: { type: 'string', enum: ['edit', 'review', 'publish', 'comment', 'any'] },
+          status: { type: 'string', enum: ['publish', 'draft', 'private', 'pending', 'future', 'any'] },
+          page: { type: 'number', description: 'Page number' },
+          perPage: { type: 'number', description: 'Results per page' },
+          postId: { type: 'number', description: 'Post ID' },
+          note: { type: 'string', description: 'Editorial note' },
+          publishAction: { type: 'string', enum: ['publish_now', 'schedule', 'private'] },
+          schedule_date: { type: 'string', description: 'ISO 8601 date for scheduling' }
+        },
+        required: ['action']
+      },
+      execute: async (params, context) => {
+        return this.executeWorkflowAction(params, context);
+      }
+    });
+  }
+
+  createMediaManagementTool() {
+    this.featureMap.set('media-management', {
+      name: 'Media Management',
+      description: '[Media Management] Upload and manage media files',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['upload', 'manage'],
+            description: 'Media action to perform'
+          },
+          imageUrl: { type: 'string', description: 'URL of image to upload' },
+          title: { type: 'string', description: 'Media title' },
+          altText: { type: 'string', description: 'Alt text for accessibility' },
+          search: { type: 'string', description: 'Search term for media' },
+          mediaType: { type: 'string', enum: ['image', 'video', 'audio', 'document'] },
+          perPage: { type: 'number', description: 'Number of items to return' }
+        },
+        required: ['action']
+      },
+      execute: async (params, context) => {
+        return this.executeMediaAction(params, context);
+      }
+    });
+  }
+
+  createSiteAdministrationTool() {
+    this.featureMap.set('site-administration', {
+      name: 'Site Administration',
+      description: '[Site Administration] Manage categories, users, and settings',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['review', 'moderate', 'categories'],
+            description: 'Administration action to perform'
+          },
+          contentType: { type: 'string', enum: ['posts', 'comments'] },
+          status: { type: 'string', enum: ['pending', 'draft', 'all', 'approved', 'spam', 'trash'] },
+          perPage: { type: 'number', description: 'Number of items to return' },
+          commentIds: { type: 'array', items: { type: 'number' } },
+          moderateAction: { type: 'string', enum: ['approve', 'hold', 'spam', 'trash'] },
+          reason: { type: 'string', description: 'Reason for action' },
+          categoryAction: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+          categoryId: { type: 'number', description: 'Category ID' },
+          name: { type: 'string', description: 'Category name' },
+          description: { type: 'string', description: 'Category description' },
+          parentId: { type: 'number', description: 'Parent category ID' }
+        },
+        required: ['action']
+      },
+      execute: async (params, context) => {
+        return this.executeAdminAction(params, context);
+      }
+    });
+  }
+
+  // Action routing methods that delegate to existing implementation classes
+  async executeContentAction(params, context) {
+    switch (params.action) {
+      case 'draft':
+        return this.createDraftArticle(params);
+      case 'publish':
+        return this.publishArticle(params);
+      case 'edit':
+        return this.editDraft(params);
+      case 'pull':
+        return this.pullForEditing(params);
+      case 'sync':
+        return this.syncToWordPress(params);
+      case 'page':
+        return this.createPage(params);
+      case 'trash':
+        return this.trashContent(params);
+      default:
+        throw new Error(`Unknown content action: ${params.action}`);
+    }
+  }
+
+  async executeBlockAction(params, context) {
+    const { server } = context;
+    const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+    
+    if (!sessionManager) {
+      throw new Error('No active document sessions. Use content-management with action "pull" first.');
+    }
+
+    switch (params.action) {
+      case 'list':
+        return sessionManager.listBlocks(params.documentHandle, params.filter || {});
+      case 'read':
+        return sessionManager.readBlock(params.documentHandle, params.blockId);
+      case 'edit':
+        return sessionManager.editBlock(params.documentHandle, params.blockId, params);
+      case 'insert':
+        return sessionManager.insertBlock(params.documentHandle, params);
+      case 'delete':
+        return sessionManager.deleteBlock(params.documentHandle, params.blockId);
+      case 'reorder':
+        return sessionManager.reorderBlocks(params.documentHandle, params.blockId, params.newPosition);
+      case 'validate':
+        return sessionManager.validateBlocks(params.documentHandle, params.blocks);
+      default:
+        throw new Error(`Unknown block action: ${params.action}`);
+    }
+  }
+
+  async executeWorkflowAction(params, context) {
+    switch (params.action) {
+      case 'find':
+        return this.findPostsForWorkflow(params);
+      case 'submit':
+        return this.submitForReview(params);
+      case 'publish':
+        return this.publishWorkflow({
+          postId: params.postId,
+          action: params.publishAction,
+          schedule_date: params.schedule_date
+        });
+      case 'feedback':
+        return this.viewEditorialFeedback(params);
+      default:
+        throw new Error(`Unknown workflow action: ${params.action}`);
+    }
+  }
+
+  async executeMediaAction(params, context) {
+    switch (params.action) {
+      case 'upload':
+        return this.uploadImageFromUrl(params);
+      case 'manage':
+        return this.listMedia(params);
+      default:
+        throw new Error(`Unknown media action: ${params.action}`);
+    }
+  }
+
+  async executeAdminAction(params, context) {
+    switch (params.action) {
+      case 'review':
+        return this.reviewContent(params);
+      case 'moderate':
+        return this.moderateComments({
+          commentIds: params.commentIds,
+          action: params.moderateAction,
+          reason: params.reason
+        });
+      case 'categories':
+        return this.manageCategories({
+          action: params.categoryAction,
+          categoryId: params.categoryId,
+          name: params.name,
+          description: params.description,
+          parentId: params.parentId
+        });
+      default:
+        throw new Error(`Unknown admin action: ${params.action}`);
+    }
+  }
+
+    // Legacy support - these tools will be removed
     this.featureMap.set('edit-draft', {
       name: 'Edit Draft',
       description: 'Edit an existing draft post with content and metadata',
@@ -559,99 +778,13 @@ export class FeatureMapper {
   }
   
   createMediaOperations() {
-    // Upload Media with Article Context - for authors
-    this.featureMap.set('upload-featured-image', {
-      name: 'Upload Featured Image',
-      description: 'Upload an image from URL to use as featured image',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          imageUrl: { type: 'string', description: 'URL of image to upload' },
-          title: { type: 'string', description: 'Title for the image' },
-          altText: { type: 'string', description: 'Alt text for accessibility' },
-        },
-        required: ['imageUrl'],
-      },
-      execute: async (params) => {
-        return this.uploadImageFromUrl(params);
-      }
-    });
-
-    // Manage Media Library - for authors
-    this.featureMap.set('manage-media', {
-      name: 'Manage Media',
-      description: 'List and search media items in library',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          search: { type: 'string', description: 'Search term for media' },
-          mediaType: { type: 'string', enum: ['image', 'video', 'audio', 'document'], description: 'Filter by media type' },
-          perPage: { type: 'number', description: 'Number of items to return', default: 10 },
-        },
-        required: [],
-      },
-      execute: async (params) => {
-        return this.listMedia(params);
-      }
-    });
+    // Media operations are now handled by the unified media-management tool
+    // Individual tools are no longer created here
   }
   
   createUserOperations() {
-    // Editorial Review Workflow - for editors
-    this.featureMap.set('review-content', {
-      name: 'Review Content',
-      description: 'Review and manage pending posts and comments',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          contentType: { type: 'string', enum: ['posts', 'comments'], description: 'Type of content to review' },
-          status: { type: 'string', enum: ['pending', 'draft'], description: 'Status filter' },
-          perPage: { type: 'number', description: 'Number of items to return', default: 10 },
-        },
-        required: ['contentType'],
-      },
-      execute: async (params) => {
-        return this.reviewContent(params);
-      }
-    });
-
-    // Moderate Comments - for editors
-    this.featureMap.set('moderate-comments', {
-      name: 'Moderate Comments',
-      description: 'Approve, reject, or manage comments in bulk',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          commentIds: { type: 'array', items: { type: 'number' }, description: 'IDs of comments to moderate' },
-          action: { type: 'string', enum: ['approve', 'hold', 'spam', 'trash'], description: 'Moderation action' },
-          reason: { type: 'string', description: 'Optional reason for action' },
-        },
-        required: ['commentIds', 'action'],
-      },
-      execute: async (params) => {
-        return this.moderateComments(params);
-      }
-    });
-
-    // Manage Categories - for editors
-    this.featureMap.set('manage-categories', {
-      name: 'Manage Categories',
-      description: 'Create, update, and organize content categories',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string', enum: ['list', 'create', 'update', 'delete'], description: 'Category action' },
-          categoryId: { type: 'number', description: 'Category ID (for update/delete)' },
-          name: { type: 'string', description: 'Category name' },
-          description: { type: 'string', description: 'Category description' },
-          parentId: { type: 'number', description: 'Parent category ID' },
-        },
-        required: ['action'],
-      },
-      execute: async (params) => {
-        return this.manageCategories(params);
-      }
-    });
+    // User operations are now handled by the unified site-administration tool
+    // Individual tools are no longer created here
   }
   
   getSemanticOperations() {
@@ -659,79 +792,51 @@ export class FeatureMapper {
   }
   
   getGroupedSemanticOperations() {
-    // Return operations organized by semantic groups
+    // Return the 5 unified semantic tools organized by groups
     const groups = {
-      content: {
-        name: 'Content Management',
+      'content-management': {
+        name: 'Content Management', 
         description: 'Create, edit, and manage posts and pages',
         operations: []
       },
-      blocks: {
+      'block-editor': {
         name: 'Block Editor',
-        description: 'Edit content using WordPress blocks',
+        description: 'Edit content using WordPress blocks', 
         operations: []
       },
-      workflow: {
+      'publishing-workflow': {
         name: 'Publishing Workflow',
         description: 'Review, approve, and publish content',
         operations: []
       },
-      media: {
+      'media-management': {
         name: 'Media Management',
         description: 'Upload and manage media files',
         operations: []
       },
-      admin: {
-        name: 'Site Administration',
+      'site-administration': {
+        name: 'Site Administration', 
         description: 'Manage categories, users, and settings',
         operations: []
       }
     };
 
-    // Categorize operations by their semantic purpose
-    const operationGroups = {
-      content: ['draft-article', 'publish-article', 'edit-draft', 'draft-page', 
-                'create-page', 'pull-for-editing', 'sync-to-wordpress', 
-                'trash-own-content', 'publish-markdown-as-page'],
-      blocks: ['list-blocks', 'read-block', 'edit-block', 'insert-block', 
-               'delete-block', 'reorder-blocks', 'validate-blocks'],
-      workflow: ['find-posts', 'submit-for-review', 'publish-workflow', 
-                 'view-editorial-feedback'],
-      media: ['upload-featured-image', 'manage-media'],
-      admin: ['review-content', 'moderate-comments', 'manage-categories']
+    // Map the 5 unified tools to their respective groups
+    const toolMapping = {
+      'content-management': 'content-management',
+      'block-editor': 'block-editor', 
+      'publishing-workflow': 'publishing-workflow',
+      'media-management': 'media-management',
+      'site-administration': 'site-administration'
     };
 
-    // Document editing operations (legacy, to be removed)
-    const documentOps = ['edit-document', 'read-document', 'edit-document-line', 
-                        'insert-at-line', 'replace-lines', 'search-replace',
-                        'list-editing-sessions', 'close-editing-session'];
-
-    // Populate groups with operations
-    for (const [groupKey, opNames] of Object.entries(operationGroups)) {
-      for (const opName of opNames) {
-        const operation = this.featureMap.get(opName);
-        if (operation) {
-          groups[groupKey].operations.push({
-            ...operation,
-            // Add group context to each operation
-            group: groupKey,
-            groupName: groups[groupKey].name
-          });
-        }
-      }
-    }
-
-    // Add document operations to blocks group (they work within block sessions)
-    for (const opName of documentOps) {
-      const operation = this.featureMap.get(opName);
-      if (operation) {
-        groups.blocks.operations.push({
-          ...operation,
-          group: 'blocks',
-          groupName: groups.blocks.name,
-          subgroup: 'document',
-          deprecated: true,
-          deprecationNote: 'Use block operations instead'
+    for (const [toolName, groupKey] of Object.entries(toolMapping)) {
+      const tool = this.featureMap.get(toolName);
+      if (tool) {
+        groups[groupKey].operations.push({
+          ...tool,
+          group: groupKey,
+          groupName: groups[groupKey].name
         });
       }
     }
