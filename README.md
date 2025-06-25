@@ -10,7 +10,7 @@ A personality-based Model Context Protocol (MCP) server for WordPress that provi
 - **🔄 Transparent Format Conversion**: AI edits clean Markdown → WordPress receives formatted HTML
 - **✏️ Flexible Line-Based Editing**: Precise line operations + contextual search/replace
 - **🛡️ WordPress-Native Permissions**: Let WordPress handle all permission enforcement
-- **📝 Content Management**: Create drafts, publish posts, schedule content, manage media
+- **📝 Content Management**: Create drafts, publish posts/pages, schedule content, manage media
 - **⚡ Map-Based Architecture**: JSON configuration for tool assignments, no hardcoded roles
 
 ## Semantic Architecture
@@ -232,6 +232,7 @@ The setup wizard will:
 
 - **[Architecture Overview](ARCHITECTURE.md)** - Technical details about the semantic operation engine
 - **[Customization Guide](CUSTOMIZATION.md)** - Create custom personalities and tool mappings
+- **[Page Creation Examples](docs/page-examples.md)** - Complete guide to creating and managing pages
 - **[WordPress MCP Analysis](wordpress-mcp-analysis-report.md)** - Why we built this differently
 - **[Test Documentation](tests/README.md)** - Running and understanding the test suite
 
@@ -358,10 +359,11 @@ Note: The server reads credentials from its `.env` file, not from the Claude con
 
 Once configured, the WordPress tools will be available in Claude. You can:
 
-- Create and edit draft posts
-- Publish articles with scheduling options
+- Create and edit draft posts and pages
+- Publish articles and pages with scheduling options
+- **Create hierarchical page structures with parent-child relationships**
 - **Search posts using natural language**
-- **Pull posts for editing with document sessions**
+- **Pull posts/pages for editing with document sessions**
 - **Edit content using line-based operations**
 - **Sync changes back in single API call**
 - Manage media files
@@ -383,8 +385,17 @@ Once configured, the WordPress tools will be available in Claude. You can:
 - "Edit my latest draft about semantic APIs"
   → AI finds recent drafts → pulls for editing → helps with changes
 
+**Page-Specific Workflows:**
+- "Create an About Us page"
+  → AI uses `draft-page` or `create-page` with clear semantic context
+- "Make a Services page under the main Services section"
+  → AI creates hierarchical page with parent relationship
+- "Edit the Contact page to add new office hours"
+  → AI uses `pull-for-editing` with `type: "page"`
+
 **Direct ID-Based Operations (when you know the ID):**
 - "Pull post 42 for editing"
+- "Pull page 15 for editing"
 - "Publish draft with ID 30"
 - "Schedule post 55 for next Monday at 9 AM"
 
@@ -459,12 +470,13 @@ The tool mappings are defined in `config/personalities.json`:
 
 **Content Creation:**
 - `draft-article` - Create draft posts
+- `draft-page` - Create draft pages for static content
 - `edit-draft` - Edit existing drafts
 - `submit-for-review` - Submit drafts for editorial review
 - `view-editorial-feedback` - See editor comments
 
 **Document Session Workflow:**
-- `pull-for-editing` - Fetch posts into editing sessions
+- `pull-for-editing` - Fetch posts/pages into editing sessions
 - `read-document` - Read documents with line numbers
 - `edit-document-line` - Replace specific lines by number
 - `insert-at-line` - Insert content at line positions
@@ -481,16 +493,30 @@ The tool mappings are defined in `config/personalities.json`:
 
 **Publishing:**
 - `create-article` - Create and publish posts immediately
+- `create-page` - Create and publish pages with hierarchy
 - `publish-workflow` - Publish or schedule posts
 - `manage-media` - Upload and manage media files
+
+**Content Management:**
+- `trash-own-content` - Move your own posts or pages to trash
 
 ### Administrator
 
 - All author tools, plus:
 
 **Site Management:**
-- `bulk-content-operations` - Bulk actions on posts
+- `bulk-content-operations` - Bulk actions on posts/pages (trash, restore, delete, change status)
 - `manage-all-content` - View and manage all posts
+- `review-content` - Review pending posts and comments
+- `moderate-comments` - Approve, reject, or manage comments
+- `manage-categories` - Create, update, and organize categories
+
+### Editor
+
+- All author tools, plus:
+
+**Editorial Management:**
+- `bulk-content-operations` - Bulk actions on posts/pages (trash, restore, delete, change status)
 - `review-content` - Review pending posts and comments
 - `moderate-comments` - Approve, reject, or manage comments
 - `manage-categories` - Create, update, and organize categories
@@ -501,9 +527,9 @@ Edit `config/personalities.json` to create custom role mappings:
 
 ```json
 {
-  "editor": {
-    "name": "Editor",
-    "description": "Editorial team member",
+  "custom-editor": {
+    "name": "Custom Editor",
+    "description": "Custom editorial team member",
     "features": ["manage-all-content", "edit-draft", "publish-workflow", "bulk-content-operations"],
     "context": {
       "can_publish": true,

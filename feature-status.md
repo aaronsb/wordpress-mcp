@@ -1,6 +1,6 @@
 # Feature Implementation Status
 
-## Implemented Features (24 total)
+## Implemented Features (25 total)
 
 ### Content Operations - Posts
 - ✅ find-posts (semantic search with intent)
@@ -31,10 +31,11 @@
 - ✅ upload-featured-image
 - ✅ manage-media
 
-### Moderation
+### Moderation & Management
 - ✅ review-content
 - ✅ moderate-comments
 - ✅ manage-categories
+- ✅ bulk-content-operations (trash, restore, delete, change status for posts/pages)
 
 ## Missing Features by Role
 
@@ -68,12 +69,17 @@
 
 ## Recent Additions
 
-### Trash Operations (Current Branch)
-- Added trash-own-content feature for posts and pages
-- Fixed WordPress REST API trash status issue
-- Uses DELETE method instead of status update (WordPress doesn't accept 'trash' as status)
-- Includes ownership verification before trashing
-- Works for both posts and pages
+### Trash Operations (Current Branch - feature/trash-operations)
+- Added trash-own-content feature for authors (posts and pages)
+- Extended bulk-content-operations to support pages
+- Added bulk-content-operations to editor and administrator personalities
+- Fixed WordPress REST API trash status issue:
+  - Uses DELETE method instead of status update (WordPress doesn't accept 'trash' as status)
+  - DELETE without force=true moves to trash
+  - DELETE with force=true permanently deletes
+- Includes ownership verification in trash-own-content
+- Bulk operations support: trash, restore, delete, change status
+- Separate contentType parameter for posts vs pages
 
 ### Page Support (PR #1)
 - Added complete page creation and editing functionality
