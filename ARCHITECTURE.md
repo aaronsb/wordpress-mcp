@@ -21,6 +21,7 @@ Just as ECU maps adjust fuel injection, timing, and boost pressure without chang
 3. **Context-Aware Execution**: Features adapt based on runtime context and user capabilities
 4. **Modular Feature System**: Easy to extend with new capabilities
 5. **WordPress Knowledge Embedded**: Business logic lives in features, not in AI prompts
+6. **Content Type Awareness**: Clear semantic distinction between posts (time-based) and pages (static)
 
 ## Architecture Layers
 
@@ -231,6 +232,56 @@ export class CustomScopeRule extends BaseScopeRule {
 2. **Connection Pooling**: Reuse WordPress API connections
 3. **Response Caching**: Optional caching layer
 4. **Minimal Tool Surface**: Only expose needed tools
+
+## Content Type Handling
+
+### Posts vs Pages
+
+The architecture maintains clear semantic distinction between content types:
+
+**Posts** (Time-based content):
+- Blog entries, news, articles
+- Support categories and tags
+- Appear in RSS feeds
+- Have publish dates that matter
+- Can be scheduled
+
+**Pages** (Static content):
+- About, Services, Contact pages
+- Support hierarchical structure (parent-child)
+- Have menu ordering
+- Support custom templates
+- Form site structure
+
+### Unified Editing Workflow
+
+Both posts and pages use the same document session workflow:
+
+```javascript
+// Pull for editing with type parameter
+pull-for-editing { postId: 10, type: 'page' }
+// Returns consistent document handle
+
+// Edit operations work identically
+edit-document-line { documentHandle, lineNumber, newLine }
+
+// Sync preserves content type context
+sync-to-wordpress { documentHandle }
+// Automatically updates correct endpoint
+```
+
+### Content Type Awareness
+
+Features include semantic context to guide AI behavior:
+
+```javascript
+{
+  semanticContext: {
+    contentType: 'page',
+    hint: 'This is a PAGE - use it for permanent, timeless content'
+  }
+}
+```
 
 ## Error Handling Strategy
 

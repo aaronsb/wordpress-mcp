@@ -16,31 +16,19 @@ export class FeatureMapper {
   }
 
   async initialize() {
-    // Discover available WordPress features
-    const wpFeatures = await this.wpClient.discoverFeatures();
+    // Initialize semantic operations directly
+    // We don't need to discover WordPress features - we define our own semantic layer
+    this.mapSemanticOperations();
     
-    // Group them into semantic operations
-    this.mapSemanticOperations(wpFeatures);
-    
-    console.error(`Mapped ${wpFeatures.length} WordPress features into ${this.featureMap.size} semantic operations`);
+    console.error(`Initialized ${this.featureMap.size} semantic operations`);
   }
 
-  mapSemanticOperations(wpFeatures) {
-    // Create a map of feature types for easy lookup
-    const featuresByType = this.groupFeaturesByType(wpFeatures);
-    
-    // Map semantic operations based on available features
-    if (featuresByType.posts) {
-      this.createPostOperations(featuresByType.posts);
-    }
-    
-    if (featuresByType.media) {
-      this.createMediaOperations(featuresByType.media);
-    }
-    
-    if (featuresByType.users) {
-      this.createUserOperations(featuresByType.users);
-    }
+  mapSemanticOperations() {
+    // Create all semantic operations
+    this.createPostOperations();
+    this.createBlockOperations();
+    this.createMediaOperations();
+    this.createUserOperations();
   }
 
   groupFeaturesByType(features) {
@@ -64,10 +52,9 @@ export class FeatureMapper {
     return grouped;
   }
 
-  createPostOperations(postFeatures) {
+  createPostOperations() {
     // Draft Article - combines post creation with proper status
-    if (postFeatures.create) {
-      this.featureMap.set('draft-article', {
+    this.featureMap.set('draft-article', {
         name: 'Draft Article',
         description: 'Create a draft article with categories and tags',
         inputSchema: {
@@ -85,11 +72,9 @@ export class FeatureMapper {
           return this.createDraftArticle(params);
         }
       });
-    }
 
     // Publish Article - creates and publishes in one go
-    if (postFeatures.create) {
-      this.featureMap.set('publish-article', {
+    this.featureMap.set('publish-article', {
         name: 'Publish Article',
         description: 'Create and publish an article immediately with all metadata',
         inputSchema: {
@@ -108,7 +93,6 @@ export class FeatureMapper {
           return this.publishArticle(params);
         }
       });
-    }
 
     // Edit Draft - semantic editing of existing drafts
     this.featureMap.set('edit-draft', {
@@ -434,7 +418,147 @@ export class FeatureMapper {
     });
   }
   
-  createMediaOperations(mediaFeatures) {
+  createBlockOperations() {
+    // Block operations for editing within sessions
+    this.featureMap.set('list-blocks', {
+      name: 'List Blocks',
+      description: 'List all blocks in the current document session',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
+          filter: { type: 'object', description: 'Optional filters' }
+        },
+        required: ['documentHandle']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        if (!sessionManager) {
+          throw new Error('No active document sessions. Use pull-for-editing first.');
+        }
+        return await sessionManager.listBlocks(params.documentHandle, params.filter || {});
+      }
+    });
+
+    this.featureMap.set('edit-block', {
+      name: 'Edit Block',
+      description: 'Edit block content and/or attributes',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          blockId: { type: 'string', description: 'Block ID' },
+          content: { type: 'string', description: 'New content' },
+          attributes: { type: 'object', description: 'Block attributes' },
+          validateImmediately: { type: 'boolean', default: true }
+        },
+        required: ['documentHandle', 'blockId']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.editBlock(params.documentHandle, params.blockId, params);
+      }
+    });
+
+    this.featureMap.set('insert-block', {
+      name: 'Insert Block',
+      description: 'Insert a new block at specified position',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          type: { type: 'string', description: 'Block type' },
+          content: { type: 'string', description: 'Block content' },
+          position: { type: 'number', description: 'Insert position' },
+          attributes: { type: 'object', description: 'Block attributes' },
+          validateImmediately: { type: 'boolean', default: true }
+        },
+        required: ['documentHandle', 'type', 'content', 'position']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.insertBlock(params.documentHandle, params);
+      }
+    });
+
+    this.featureMap.set('delete-block', {
+      name: 'Delete Block',
+      description: 'Delete a block',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          blockId: { type: 'string', description: 'Block ID to delete' }
+        },
+        required: ['documentHandle', 'blockId']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.deleteBlock(params.documentHandle, params.blockId);
+      }
+    });
+
+    this.featureMap.set('read-block', {
+      name: 'Read Block',
+      description: 'Read a specific block by ID',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          blockId: { type: 'string', description: 'Block ID' }
+        },
+        required: ['documentHandle', 'blockId']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.readBlock(params.documentHandle, params.blockId);
+      }
+    });
+
+    this.featureMap.set('reorder-blocks', {
+      name: 'Reorder Blocks',
+      description: 'Change block order',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          blockId: { type: 'string', description: 'Block to move' },
+          newPosition: { type: 'number', description: 'New position' }
+        },
+        required: ['documentHandle', 'blockId', 'newPosition']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.reorderBlocks(params.documentHandle, params.blockId, params.newPosition);
+      }
+    });
+
+    this.featureMap.set('validate-blocks', {
+      name: 'Validate Blocks',
+      description: 'Validate block structure without saving',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          documentHandle: { type: 'string', description: 'Document handle' },
+          blocks: { type: 'array', description: 'Specific blocks to validate' }
+        },
+        required: ['documentHandle']
+      },
+      execute: async (params, context) => {
+        const { server } = context;
+        const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+        return await sessionManager.validateBlocks(params.documentHandle, params.blocks);
+      }
+    });
+  }
+  
+  createMediaOperations() {
     // Upload Media with Article Context - for authors
     this.featureMap.set('upload-featured-image', {
       name: 'Upload Featured Image',
@@ -472,7 +596,7 @@ export class FeatureMapper {
     });
   }
   
-  createUserOperations(userFeatures) {
+  createUserOperations() {
     // Editorial Review Workflow - for editors
     this.featureMap.set('review-content', {
       name: 'Review Content',
@@ -534,6 +658,87 @@ export class FeatureMapper {
     return Array.from(this.featureMap.values());
   }
   
+  getGroupedSemanticOperations() {
+    // Return operations organized by semantic groups
+    const groups = {
+      content: {
+        name: 'Content Management',
+        description: 'Create, edit, and manage posts and pages',
+        operations: []
+      },
+      blocks: {
+        name: 'Block Editor',
+        description: 'Edit content using WordPress blocks',
+        operations: []
+      },
+      workflow: {
+        name: 'Publishing Workflow',
+        description: 'Review, approve, and publish content',
+        operations: []
+      },
+      media: {
+        name: 'Media Management',
+        description: 'Upload and manage media files',
+        operations: []
+      },
+      admin: {
+        name: 'Site Administration',
+        description: 'Manage categories, users, and settings',
+        operations: []
+      }
+    };
+
+    // Categorize operations by their semantic purpose
+    const operationGroups = {
+      content: ['draft-article', 'publish-article', 'edit-draft', 'draft-page', 
+                'create-page', 'pull-for-editing', 'sync-to-wordpress', 
+                'trash-own-content', 'publish-markdown-as-page'],
+      blocks: ['list-blocks', 'read-block', 'edit-block', 'insert-block', 
+               'delete-block', 'reorder-blocks', 'validate-blocks'],
+      workflow: ['find-posts', 'submit-for-review', 'publish-workflow', 
+                 'view-editorial-feedback'],
+      media: ['upload-featured-image', 'manage-media'],
+      admin: ['review-content', 'moderate-comments', 'manage-categories']
+    };
+
+    // Document editing operations (legacy, to be removed)
+    const documentOps = ['edit-document', 'read-document', 'edit-document-line', 
+                        'insert-at-line', 'replace-lines', 'search-replace',
+                        'list-editing-sessions', 'close-editing-session'];
+
+    // Populate groups with operations
+    for (const [groupKey, opNames] of Object.entries(operationGroups)) {
+      for (const opName of opNames) {
+        const operation = this.featureMap.get(opName);
+        if (operation) {
+          groups[groupKey].operations.push({
+            ...operation,
+            // Add group context to each operation
+            group: groupKey,
+            groupName: groups[groupKey].name
+          });
+        }
+      }
+    }
+
+    // Add document operations to blocks group (they work within block sessions)
+    for (const opName of documentOps) {
+      const operation = this.featureMap.get(opName);
+      if (operation) {
+        groups.blocks.operations.push({
+          ...operation,
+          group: 'blocks',
+          groupName: groups.blocks.name,
+          subgroup: 'document',
+          deprecated: true,
+          deprecationNote: 'Use block operations instead'
+        });
+      }
+    }
+
+    return groups;
+  }
+  
   getOperation(name) {
     return this.featureMap.get(name);
   }
@@ -576,6 +781,12 @@ export class FeatureMapper {
         status: post.status,
         editLink: post.link.replace(this.wpClient.baseUrl, '') + '?preview=true',
         message: `Draft created successfully: "${params.title}"`,
+        semanticContext: {
+          contentType: 'post',
+          hint: 'Draft created - use edit-draft to modify or submit-for-review when ready'
+        },
+        suggestedActions: ['edit-draft', 'pull-for-editing', 'submit-for-review'],
+        workflowGuidance: '📝 Your draft is saved. Next steps:\n- Use pull-for-editing to edit with blocks\n- Use submit-for-review when ready for publication'
       };
     } catch (error) {
       throw new Error(`Failed to create draft: ${error.message}`);

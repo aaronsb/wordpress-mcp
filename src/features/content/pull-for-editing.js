@@ -1,14 +1,14 @@
 /**
  * Pull for Editing Feature
  *
- * Download a post or page to local workspace for atomic editing
+ * Fetch a WordPress post or page into an editing session with block support
  */
 
-import { WorkspaceManager } from '../../core/workspace-manager.js';
+import { EnhancedDocumentSessionManager } from '../../core/enhanced-document-session-manager.js';
 
 export default {
   name: 'pull-for-editing',
-  description: 'Download a post or page to local workspace for precise editing. Use this workflow instead of updating content directly - it enables atomic, safe editing operations.',
+  description: 'Fetch a WordPress post or page into an editing session',
 
   inputSchema: {
     type: 'object',
@@ -24,11 +24,11 @@ export default {
         description: 'Type of content to pull (post or page)',
       },
     },
-    required: ['postId'],
+    required: ['postId', 'type'],
   },
 
   async execute(params, context) {
-    const { wpClient } = context;
+    const { wpClient, server } = context;
     const contentType = params.type || 'post';
 
     try {
@@ -46,14 +46,9 @@ export default {
           throw new Error('You do not have permission to edit this page');
         }
       } else {
-        // Get the post using Feature API
-        content = await wpClient.executeFeature('resource-post', { 
-          id: params.postId,
-          context: 'edit' // Get full editing context
-        });
-        
-        // Get current user to verify permissions
-        currentUser = await wpClient.executeFeature('resource-users/me');
+        // Get the post using REST API for consistency
+        content = await wpClient.getPost(params.postId);
+        currentUser = await wpClient.getCurrentUser();
         
         // Check if user can edit this post
         if (content.author !== currentUser.id && !currentUser.capabilities?.edit_others_posts) {
@@ -61,52 +56,42 @@ export default {
         }
       }
 
-      // Initialize workspace manager
-      const workspace = new WorkspaceManager();
-      await workspace.initialize();
+      // Get document session manager from server
+      let sessionManager = server.documentSessionManager;
+      if (!sessionManager) {
+        sessionManager = new EnhancedDocumentSessionManager();
+        server.documentSessionManager = sessionManager;
+      }
       
-      // Pull content to local workspace
-      const result = await workspace.pullContent(content, wpClient, contentType);
+      // Create editing session with blocks
+      const session = await sessionManager.createSession(
+        params.postId,
+        content.content.raw || content.content.rendered,
+        {
+          title: content.title.rendered,
+          status: content.status,
+          contentType: contentType,
+          wpClient: wpClient,
+          author: content.author,
+          modified: content.modified,
+        }
+      );
       
       return {
         success: true,
-        [`${contentType}Id`]: content.id,
-        title: content.title.rendered,
-        status: content.status,
-        type: contentType,
-        localPath: result.localPath,
-        wordCount: this.estimateWordCount(content.content.rendered),
+        documentHandle: session.documentHandle,
+        [`${contentType}Id`]: content.id, 
+        contentType: contentType,
+        title: session.title,
+        status: session.status,
+        format: session.format,
+        blockCount: session.blockCount,
         lastModified: new Date(content.modified).toISOString(),
-        message: `${contentType === 'page' ? 'Page' : 'Post'} "${content.title.rendered}" is now available for editing`,
-        workflow: contentType === 'page' 
-          ? 'Use the document editing tools to modify the page content, then sync-to-wordpress to save your changes.'
-          : 'Use the semantic editing workflow: edit-post-content for changes, then sync-to-wordpress to save. This is safer than direct post updates.',
-        instructions: contentType === 'page'
-          ? [
-              'Use read-document to view the current page content',
-              'Use edit-document or related tools to make changes',
-              'Use sync-to-wordpress when ready to publish your changes',
-              'Pages are for static content like About, Services, Contact pages'
-            ]
-          : [
-              'Use edit-post-content to make precise changes (not direct post updates)',
-              'Use sync-to-wordpress when ready to update (not REST API calls)',
-              'Use cleanup-workspace when finished editing',
-            ],
-        semanticContext: {
-          contentType: contentType,
-          hint: contentType === 'page' 
-            ? 'This is a PAGE - use it for permanent, timeless content that forms your site structure'
-            : 'This is a POST - use it for time-based content like news, articles, or blog entries'
-        },
+        message: session.message,
+        blocks: session.blocks,
       };
     } catch (error) {
       throw error;
     }
-  },
-
-  estimateWordCount(htmlContent) {
-    const textContent = htmlContent.replace(/<[^>]*>/g, ' ').trim();
-    return textContent ? textContent.split(/\s+/).length : 0;
   },
 };

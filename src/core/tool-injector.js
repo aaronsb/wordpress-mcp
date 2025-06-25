@@ -6,9 +6,10 @@
  */
 
 export class ToolInjector {
-  constructor(personalityConfig, featureRegistry) {
+  constructor(personalityConfig, featureRegistry, server) {
     this.personalityConfig = personalityConfig;
     this.featureRegistry = featureRegistry;
+    this.server = server;
   }
 
   /**
@@ -51,6 +52,7 @@ export class ToolInjector {
         try {
           const result = await feature.execute(params, {
             wpClient: this.featureRegistry.wpClient,
+            server: this.server,
           });
 
           // Handle WordPress permission errors gracefully

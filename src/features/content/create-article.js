@@ -1,12 +1,15 @@
 /**
  * Create Article Feature
  *
- * Creates an article with publishing options - for authors and administrators
+ * Creates an article with WordPress blocks and publishing options - for authors and administrators
  */
+
+import { BlockConverter } from '../../core/block-converter.js';
+import blocksConfig from '../../../config/blocks.json' assert { type: 'json' };
 
 export default {
   name: 'create-article',
-  description: 'Create an article with options to publish immediately or schedule',
+  description: 'Create an article using WordPress blocks with options to publish immediately or schedule',
 
   inputSchema: {
     type: 'object',
@@ -17,7 +20,7 @@ export default {
       },
       content: {
         type: 'string',
-        description: 'Article content (HTML or plain text)',
+        description: 'Article content (Markdown format preferred)',
       },
       status: {
         type: 'string',
@@ -47,17 +50,34 @@ export default {
         items: { type: 'number' },
         description: 'Tag IDs',
       },
+      useClassicEditor: {
+        type: 'boolean',
+        description: 'Force classic editor format instead of blocks (default: false)',
+        default: false,
+      },
     },
     required: ['title', 'content'],
   },
 
   async execute(params, context) {
     const { wpClient } = context;
+    const blockConverter = new BlockConverter();
+
+    let contentHtml = params.content;
+
+    // Convert to blocks unless explicitly requested otherwise
+    if (blocksConfig.blocks.enabled && !params.useClassicEditor) {
+      // Check if content is already in block format
+      if (!params.content.includes('<!-- wp:')) {
+        // Assume markdown input and convert to blocks
+        contentHtml = blockConverter.markdownToBlocks(params.content);
+      }
+    }
 
     // Prepare post data
     const postData = {
       title: params.title,
-      content: params.content,
+      content: contentHtml,
       status: params.status || 'draft',
       excerpt: params.excerpt || '',
       featured_media: params.featured_media || 0,
