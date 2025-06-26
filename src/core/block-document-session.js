@@ -158,19 +158,14 @@ export class BlockDocumentSession {
         block.attributes = { ...block.attributes, ...updates.attributes };
       }
 
-      // Immediate validation
+      // Immediate validation - but don't block on errors
+      let validationWarnings = [];
       if (validateImmediately) {
         const errors = this.validator.validateBlock(block);
         if (errors.length > 0) {
-          // Revert changes
-          this.revertBlock(blockId, backup);
-          
-          return {
-            success: false,
-            errors,
-            suggestion: this.getSuggestionsForErrors(errors),
-            validAttributes: this.validator.getValidAttributesForType(block.type),
-          };
+          // Don't revert - just warn
+          validationWarnings = errors;
+          console.error(`Block validation warnings for ${block.type}:`, errors);
         }
       }
 
@@ -182,7 +177,10 @@ export class BlockDocumentSession {
       return {
         success: true,
         block: this.getBlockSummary(block),
-        message: 'Block updated and validated successfully',
+        message: validationWarnings.length > 0 
+          ? `Block updated with ${validationWarnings.length} validation warnings`
+          : 'Block updated and validated successfully',
+        warnings: validationWarnings,
       };
 
     } catch (error) {
@@ -206,17 +204,14 @@ export class BlockDocumentSession {
       hash: null,
     };
 
-    // Validate BEFORE inserting
+    // Validate but don't block insertion
+    let validationWarnings = [];
     if (validateImmediately) {
       const errors = this.validator.validateBlock(newBlock);
       if (errors.length > 0) {
-        return {
-          success: false,
-          errors,
-          suggestion: `Cannot insert invalid block. Issues:\n${errors.join('\n')}`,
-          validTypes: this.validator.getValidBlockTypes(),
-          exampleAttributes: this.validator.getExampleAttributes(type),
-        };
+        // Don't block - just warn
+        validationWarnings = errors;
+        console.error(`Block validation warnings for new ${type}:`, errors);
       }
     }
 
@@ -240,8 +235,11 @@ export class BlockDocumentSession {
     return {
       success: true,
       blockId: newBlock.id,
-      message: `${type} block inserted at position ${position}`,
+      message: validationWarnings.length > 0
+        ? `${type} block inserted with ${validationWarnings.length} validation warnings`
+        : `${type} block inserted at position ${position}`,
       block: this.getBlockSummary(newBlock),
+      warnings: validationWarnings,
     };
   }
 

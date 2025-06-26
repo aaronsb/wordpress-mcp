@@ -8,6 +8,7 @@
 import { DocumentSessionManager } from './document-session-manager.js';
 import { BlockDocumentSession } from './block-document-session.js';
 import { BlockConverter } from './block-converter.js';
+import { BlockAutoFixer } from './block-auto-fixer.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -24,6 +25,7 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
     // Block-specific state
     this.blockSessions = new Map(); // handle -> BlockDocumentSession
     this.blockConverter = new BlockConverter();
+    this.autoFixer = new BlockAutoFixer();
   }
 
   /**
@@ -181,13 +183,63 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
       throw new Error(`Session ${handle} not found`);
     }
     
+    // Get the blocks and apply auto-fixes
+    const blocks = blockSession.blocks;
+    const fixResult = this.autoFixer.fixBlocks(blocks);
+    
+    // Update blocks in session with fixed versions
+    blockSession.blocks = fixResult.blocks;
+    
+    // Generate HTML from fixed blocks
+    let content;
+    try {
+      content = blockSession.blocksToHtml();
+    } catch (error) {
+      // Fallback: Convert everything to paragraph blocks
+      console.error('Failed to generate HTML, falling back to paragraph blocks:', error);
+      const fallbackBlocks = blocks.map(block => ({
+        type: 'core/paragraph',
+        id: block.id || `fallback_${Date.now()}`,
+        content: `<p>${block.content || '[Empty block]'}</p>`,
+        attributes: {}
+      }));
+      
+      // Try again with simplified blocks
+      blockSession.blocks = fallbackBlocks;
+      content = blockSession.blocksToHtml();
+      
+      fixResult.fixes.push('Converted all blocks to paragraphs as last resort');
+      fixResult.fixCount = fixResult.fixes.length;
+    }
+    
     return {
       contentId: session.contentId,
       contentType: session.contentType, 
-      content: blockSession.blocksToHtml(),
+      content: content,
       metadata: session.metadata,
-      hasChanges: blockSession.getChanges().total > 0
+      hasChanges: blockSession.getChanges().total > 0,
+      validation: {
+        fixesApplied: fixResult.fixCount > 0,
+        fixCount: fixResult.fixCount,
+        fixes: fixResult.fixes,
+        summary: fixResult.fixCount > 0 
+          ? `Applied ${fixResult.fixCount} fixes to ensure valid blocks. Review content after sync to ensure it matches your intent.`
+          : 'Content validated successfully'
+      }
     };
+  }
+  
+  /**
+   * Escape HTML helper
+   */
+  escapeHtml(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**

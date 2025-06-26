@@ -151,7 +151,8 @@ export class WordPressClient {
   }
 
   async getPost(id) {
-    return this.request(`/posts/${id}`);
+    // Request with context=edit to get raw content for editing
+    return this.request(`/posts/${id}?context=edit`);
   }
 
   async updatePost(id, data) {
@@ -277,7 +278,8 @@ export class WordPressClient {
   }
 
   async getPage(id) {
-    return this.request(`/pages/${id}`);
+    // Request with context=edit to get raw content for editing
+    return this.request(`/pages/${id}?context=edit`);
   }
 
   async updatePage(id, data) {
