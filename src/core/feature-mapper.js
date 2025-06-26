@@ -1391,6 +1391,85 @@ export class FeatureMapper {
     }
   }
 
+  async manageTags(params) {
+    try {
+      switch (params.action) {
+        case 'list':
+          const tags = await this.wpClient.getTags();
+          return {
+            success: true,
+            action: 'list',
+            count: tags.length,
+            tags: tags.map(tag => ({
+              id: tag.id,
+              name: tag.name,
+              description: tag.description,
+              count: tag.count,
+            })),
+          };
+
+        case 'create':
+          const newTag = await this.wpClient.createTag({
+            name: params.name,
+            description: params.description || '',
+          });
+          return {
+            success: true,
+            action: 'create',
+            tagId: newTag.id,
+            name: newTag.name,
+            message: `Tag "${params.name}" created successfully`,
+          };
+
+        default:
+          throw new Error(`Unknown action: ${params.action}`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to manage tags: ${error.message}`);
+    }
+  }
+
+  async manageUsers(params) {
+    try {
+      switch (params.action) {
+        case 'current':
+          const currentUser = await this.wpClient.getCurrentUser();
+          return {
+            success: true,
+            action: 'current',
+            user: {
+              id: currentUser.id,
+              name: currentUser.name,
+              email: currentUser.email,
+              roles: currentUser.roles,
+              capabilities: currentUser.capabilities,
+            },
+          };
+
+        case 'get':
+          if (!params.userId) {
+            throw new Error('User ID is required for get action');
+          }
+          const user = await this.wpClient.getUser(params.userId);
+          return {
+            success: true,
+            action: 'get',
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              roles: user.roles,
+            },
+          };
+
+        default:
+          throw new Error(`Unknown action: ${params.action}`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to manage users: ${error.message}`);
+    }
+  }
+
   // Temp file workflow methods
 
   async pullForEditing(params, context) {
