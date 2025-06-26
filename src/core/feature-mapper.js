@@ -58,7 +58,7 @@ export class FeatureMapper {
   createContentManagementTool() {
     this.featureMap.set('content-management', {
       name: 'content-management',
-      description: '[Content Management] Create, edit, and manage posts and pages',
+      description: '[Content Management] Create, edit, and manage posts and pages. TROUBLESHOOTING: If sync action fails, check error message for specific recovery steps. Common fixes: delete problematic blocks and recreate them, use simple parameters instead of complex attributes.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -70,7 +70,7 @@ export class FeatureMapper {
           // Common properties
           postId: { type: 'number', description: 'Post/page ID (for edit, pull, sync, trash)' },
           title: { type: 'string', description: 'Title' },
-          content: { type: 'string', description: 'Content' },
+          content: { type: 'string', description: 'Content in clean HTML or Markdown. When editing blocks, use proper HTML tags like <h2>Title</h2>, <p>Text</p>, <ul><li>Item</li></ul>. AI-generated HTML works great with automatic validation!' },
           excerpt: { type: 'string', description: 'Brief summary' },
           categories: { type: 'array', items: { type: 'string' }, description: 'Category names' },
           tags: { type: 'array', items: { type: 'string' }, description: 'Tag names' },
@@ -108,7 +108,7 @@ export class FeatureMapper {
   createBlockEditorTool() {
     this.featureMap.set('block-editor', {
       name: 'block-editor',
-      description: '[Block Editor] Edit content using WordPress blocks',
+      description: '[Block Editor] Edit content using WordPress blocks. Write clean HTML - most AI-generated HTML passes validation easily. Content is stored as simple block comments: <!-- wp:paragraph --><p>Your content</p><!-- /wp:paragraph -->. TROUBLESHOOTING: If sync fails with "Cannot create property on string", use individual parameters (level: 2) instead of attributes objects. If validation fails, read the block first to inspect its current state.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -125,10 +125,13 @@ export class FeatureMapper {
           documentHandle: { type: 'string', description: 'Document handle from pull-for-editing' },
           blockId: { type: 'string', description: 'Block ID' },
           type: { type: 'string', description: 'Block type (for insert)' },
-          content: { type: 'string', description: 'Block content' },
+          content: { type: 'string', description: 'Block content as clean HTML. Example: For headings use <h2>My Title</h2>, for paragraphs use <p>My text</p>, for lists use <ul><li>Item</li></ul>. Most AI-written HTML works perfectly.' },
           position: { type: 'number', description: 'Position for insert/reorder' },
           newPosition: { type: 'number', description: 'New position for reorder' },
-          attributes: { type: 'object', description: 'Block attributes' },
+          attributes: { type: 'object', description: 'Block attributes (advanced use only - prefer individual parameters like level, ordered, align)' },
+          level: { type: 'number', description: 'Heading level (1-6) for heading blocks' },
+          ordered: { type: 'boolean', description: 'True for numbered lists, false for bullet lists' },
+          align: { type: 'string', enum: ['left', 'center', 'right', 'wide', 'full'], description: 'Block alignment' },
           filter: { type: 'object', description: 'Filters for list action' },
           blocks: { type: 'array', description: 'Specific blocks to validate' },
           validateImmediately: { type: 'boolean', default: true }
@@ -1384,9 +1387,18 @@ export class FeatureMapper {
         : await wpClient.getPost(params.postId);
       
       // Create editing session with blocks using the enhanced session manager
+      // Always prefer raw content (with block comments) over rendered content
+      const rawContent = content.content.raw || content.content.rendered;
+      console.log('Content format from WordPress:', {
+        hasRaw: !!content.content.raw,
+        hasRendered: !!content.content.rendered,
+        rawLength: content.content.raw?.length || 0,
+        renderedLength: content.content.rendered?.length || 0
+      });
+      
       const session = await documentSessionManager.createSession(
         params.postId, 
-        content.content.raw || content.content.rendered,
+        rawContent,
         {
           title: content.title.rendered,
           status: content.status,
@@ -1449,7 +1461,7 @@ export class FeatureMapper {
           await documentSessionManager.closeSession(params.documentHandle);
         }
         
-        return {
+        const result = {
           success: true,
           [`${isPage ? 'page' : 'post'}Id`]: syncData.contentId,
           title: updatedContent.title.rendered,
@@ -1464,6 +1476,14 @@ export class FeatureMapper {
               : 'Post updated - posts are for time-based content like news or articles'
           }
         };
+        
+        // Add validation info if fixes were applied
+        if (syncData.validation && syncData.validation.fixesApplied) {
+          result.validation = syncData.validation;
+          result.message += `. ${syncData.validation.summary}`;
+        }
+        
+        return result;
       }
       
       // Legacy markdown format fallback
@@ -1521,7 +1541,31 @@ export class FeatureMapper {
         }
       };
     } catch (error) {
-      throw new Error(`Failed to sync to WordPress: ${error.message}`);
+      // Provide specific recovery guidance based on error type
+      let errorMessage = `Failed to sync to WordPress: ${error.message}`;
+      let recoveryHints = [];
+
+      if (error.message.includes('Cannot create property') && error.message.includes('on string')) {
+        recoveryHints.push('RECOVERY: Block attributes got stringified. Use individual parameters instead of attributes object.');
+        recoveryHints.push('Example: Use "level": 2 instead of "attributes": {"level": 2}');
+        recoveryHints.push('Try: Delete the problematic block and recreate it with simple parameters.');
+      }
+
+      if (error.message.includes('Block validation')) {
+        recoveryHints.push('RECOVERY: Block validation failed. Check block content and attributes.');
+        recoveryHints.push('Try: Use block-editor read action to inspect the block, then edit with valid content.');
+      }
+
+      if (error.message.includes('Missing required attribute')) {
+        recoveryHints.push('RECOVERY: Required block attribute missing.');
+        recoveryHints.push('Example: Heading blocks need "level": 2, list blocks need "ordered": false');
+      }
+
+      if (recoveryHints.length > 0) {
+        errorMessage += '\n\n' + recoveryHints.join('\n');
+      }
+
+      throw new Error(errorMessage);
     }
   }
 
