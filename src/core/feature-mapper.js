@@ -6,7 +6,7 @@
  * as a separate tool.
  */
 
-import { DocumentSessionManager } from './document-session-manager.js';
+// DocumentSessionManager functionality merged into SessionManager
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -14,7 +14,7 @@ export class FeatureMapper {
   constructor(wpClient) {
     this.wpClient = wpClient;
     this.featureMap = new Map();
-    this.sessionManager = new DocumentSessionManager();
+    // Session manager initialized in server.js
   }
 
   async initialize() {
@@ -268,7 +268,7 @@ export class FeatureMapper {
 
   async executeBlockAction(params, context) {
     const { server } = context;
-    const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+    const sessionManager = server.documentSessionManager;
     
     if (!sessionManager) {
       throw new Error('No active document sessions. Use content-management with action "pull" first.');

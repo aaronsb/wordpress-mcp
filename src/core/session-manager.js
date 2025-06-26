@@ -5,7 +5,7 @@
  * Classic markdown editing is deprecated except for markdown import tool
  */
 
-import { DocumentSessionManager } from './document-session-manager.js';
+// DocumentSessionManager functionality merged into this class
 import { BlockDocumentSession } from './block-document-session.js';
 import { BlockConverter } from './block-converter.js';
 import { BlockAutoFixer } from './block-auto-fixer.js';
@@ -17,9 +17,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const blocksConfig = JSON.parse(readFileSync(join(__dirname, '../../config/blocks.json'), 'utf8'));
 
-export class EnhancedDocumentSessionManager extends DocumentSessionManager {
+export class SessionManager {
   constructor(wpClient) {
-    super();
     
     this.wpClient = wpClient;
     // Block-specific state
