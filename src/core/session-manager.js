@@ -282,7 +282,7 @@ export class SessionManager {
    * List active sessions
    */
   getActiveSessions() {
-    return Array.from(this.sessions.entries()).map(([handle, session]) => ({
+    return Array.from(this.blockSessions.entries()).map(([handle, session]) => ({
       documentHandle: handle,
       contentId: session.contentId,
       contentType: session.contentType,
