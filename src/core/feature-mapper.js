@@ -211,7 +211,7 @@ export class FeatureMapper {
         properties: {
           action: {
             type: 'string',
-            enum: ['review', 'moderate', 'categories'],
+            enum: ['review', 'moderate', 'categories', 'tags', 'users'],
             description: 'Administration action to perform'
           },
           contentType: { type: 'string', enum: ['posts', 'comments'] },
@@ -224,7 +224,13 @@ export class FeatureMapper {
           categoryId: { type: 'number', description: 'Category ID' },
           name: { type: 'string', description: 'Category name' },
           description: { type: 'string', description: 'Category description' },
-          parentId: { type: 'number', description: 'Parent category ID' }
+          parentId: { type: 'number', description: 'Parent category ID' },
+          // Tag parameters
+          tagAction: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+          tagId: { type: 'number', description: 'Tag ID' },
+          // User parameters  
+          userAction: { type: 'string', enum: ['list', 'get', 'current'] },
+          userId: { type: 'number', description: 'User ID' }
         },
         required: ['action']
       },
@@ -360,6 +366,18 @@ export class FeatureMapper {
           name: params.name,
           description: params.description,
           parentId: params.parentId
+        });
+      case 'tags':
+        return this.manageTags({
+          action: params.tagAction,
+          tagId: params.tagId,
+          name: params.name,
+          description: params.description
+        });
+      case 'users':
+        return this.manageUsers({
+          action: params.userAction,
+          userId: params.userId
         });
       default:
         throw new Error(`Unknown admin action: ${params.action}`);

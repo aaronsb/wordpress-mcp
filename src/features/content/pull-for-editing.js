@@ -4,7 +4,7 @@
  * Fetch a WordPress post or page into an editing session with block support
  */
 
-import { EnhancedDocumentSessionManager } from '../../core/enhanced-document-session-manager.js';
+import { SessionManager } from '../../core/session-manager.js';
 
 export default {
   name: 'pull-for-editing',
@@ -59,7 +59,7 @@ export default {
       // Get document session manager from server
       let sessionManager = server.documentSessionManager;
       if (!sessionManager) {
-        sessionManager = new EnhancedDocumentSessionManager();
+        sessionManager = new SessionManager();
         server.documentSessionManager = sessionManager;
       }
       
