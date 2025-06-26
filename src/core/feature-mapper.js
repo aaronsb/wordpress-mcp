@@ -6,7 +6,7 @@
  * as a separate tool.
  */
 
-import { DocumentSessionManager } from './document-session-manager.js';
+// DocumentSessionManager functionality merged into SessionManager
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -14,7 +14,7 @@ export class FeatureMapper {
   constructor(wpClient) {
     this.wpClient = wpClient;
     this.featureMap = new Map();
-    this.sessionManager = new DocumentSessionManager();
+    // Session manager initialized in server.js
   }
 
   async initialize() {
@@ -211,7 +211,7 @@ export class FeatureMapper {
         properties: {
           action: {
             type: 'string',
-            enum: ['review', 'moderate', 'categories'],
+            enum: ['review', 'moderate', 'categories', 'tags', 'users'],
             description: 'Administration action to perform'
           },
           contentType: { type: 'string', enum: ['posts', 'comments'] },
@@ -224,7 +224,13 @@ export class FeatureMapper {
           categoryId: { type: 'number', description: 'Category ID' },
           name: { type: 'string', description: 'Category name' },
           description: { type: 'string', description: 'Category description' },
-          parentId: { type: 'number', description: 'Parent category ID' }
+          parentId: { type: 'number', description: 'Parent category ID' },
+          // Tag parameters
+          tagAction: { type: 'string', enum: ['list', 'create', 'update', 'delete'] },
+          tagId: { type: 'number', description: 'Tag ID' },
+          // User parameters  
+          userAction: { type: 'string', enum: ['list', 'get', 'current'] },
+          userId: { type: 'number', description: 'User ID' }
         },
         required: ['action']
       },
@@ -262,7 +268,7 @@ export class FeatureMapper {
 
   async executeBlockAction(params, context) {
     const { server } = context;
-    const sessionManager = server.documentSessionManager || server.enhancedDocumentSessionManager;
+    const sessionManager = server.documentSessionManager;
     
     if (!sessionManager) {
       throw new Error('No active document sessions. Use content-management with action "pull" first.');
@@ -360,6 +366,18 @@ export class FeatureMapper {
           name: params.name,
           description: params.description,
           parentId: params.parentId
+        });
+      case 'tags':
+        return this.manageTags({
+          action: params.tagAction,
+          tagId: params.tagId,
+          name: params.name,
+          description: params.description
+        });
+      case 'users':
+        return this.manageUsers({
+          action: params.userAction,
+          userId: params.userId
         });
       default:
         throw new Error(`Unknown admin action: ${params.action}`);
@@ -1370,6 +1388,85 @@ export class FeatureMapper {
       }
     } catch (error) {
       throw new Error(`Failed to manage categories: ${error.message}`);
+    }
+  }
+
+  async manageTags(params) {
+    try {
+      switch (params.action) {
+        case 'list':
+          const tags = await this.wpClient.getTags();
+          return {
+            success: true,
+            action: 'list',
+            count: tags.length,
+            tags: tags.map(tag => ({
+              id: tag.id,
+              name: tag.name,
+              description: tag.description,
+              count: tag.count,
+            })),
+          };
+
+        case 'create':
+          const newTag = await this.wpClient.createTag({
+            name: params.name,
+            description: params.description || '',
+          });
+          return {
+            success: true,
+            action: 'create',
+            tagId: newTag.id,
+            name: newTag.name,
+            message: `Tag "${params.name}" created successfully`,
+          };
+
+        default:
+          throw new Error(`Unknown action: ${params.action}`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to manage tags: ${error.message}`);
+    }
+  }
+
+  async manageUsers(params) {
+    try {
+      switch (params.action) {
+        case 'current':
+          const currentUser = await this.wpClient.getCurrentUser();
+          return {
+            success: true,
+            action: 'current',
+            user: {
+              id: currentUser.id,
+              name: currentUser.name,
+              email: currentUser.email,
+              roles: currentUser.roles,
+              capabilities: currentUser.capabilities,
+            },
+          };
+
+        case 'get':
+          if (!params.userId) {
+            throw new Error('User ID is required for get action');
+          }
+          const user = await this.wpClient.getUser(params.userId);
+          return {
+            success: true,
+            action: 'get',
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              roles: user.roles,
+            },
+          };
+
+        default:
+          throw new Error(`Unknown action: ${params.action}`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to manage users: ${error.message}`);
     }
   }
 

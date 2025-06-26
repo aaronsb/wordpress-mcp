@@ -28,6 +28,10 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
     this.autoFixer = new BlockAutoFixer();
   }
 
+  generateHandle() {
+    return `wp-session-${Math.random().toString(36).substr(2, 16)}`;
+  }
+
   /**
    * Create a new editing session - always uses blocks
    */
@@ -283,7 +287,7 @@ export class EnhancedDocumentSessionManager extends DocumentSessionManager {
    * List active sessions
    */
   getActiveSessions() {
-    return Array.from(this.sessions.entries()).map(([handle, session]) => ({
+    return Array.from(this.blockSessions.entries()).map(([handle, session]) => ({
       documentHandle: handle,
       contentId: session.contentId,
       contentType: session.contentType,

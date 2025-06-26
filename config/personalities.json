@@ -20,7 +20,7 @@
       "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate"],
       "publishing-workflow": ["find", "submit", "feedback"],
       "media-management": [],
-      "site-administration": []
+      "site-administration": ["categories", "tags"]
     },
     "context": {
       "can_publish": false,
@@ -40,7 +40,7 @@
       "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate"],
       "publishing-workflow": ["find", "submit", "publish", "feedback"],
       "media-management": ["upload", "manage"],
-      "site-administration": []
+      "site-administration": ["categories", "tags"]
     },
     "context": {
       "can_publish": true,
@@ -61,7 +61,7 @@
       "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate", "bulk-edit"],
       "publishing-workflow": ["find", "submit", "publish", "feedback", "review", "approve"],
       "media-management": ["upload", "manage", "bulk"],
-      "site-administration": ["review", "moderate", "categories"]
+      "site-administration": ["review", "moderate", "categories", "tags"]
     },
     "context": {
       "can_publish": true,
@@ -83,7 +83,7 @@
       "block-editor": ["list", "read", "edit", "insert", "delete", "reorder", "validate", "bulk-edit", "templates"],
       "publishing-workflow": ["find", "submit", "publish", "feedback", "review", "approve", "bulk-review"],
       "media-management": ["upload", "manage", "bulk", "storage"],
-      "site-administration": ["review", "moderate", "categories", "users", "settings", "bulk-operations"]
+      "site-administration": ["review", "moderate", "categories", "tags", "users", "settings", "bulk-operations"]
     },
     "context": {
       "can_publish": true,
