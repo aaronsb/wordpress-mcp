@@ -4,7 +4,7 @@
  * Push editing session changes back to WordPress
  */
 
-import { SessionManager } from '../../core/session-manager.js';
+import { DocumentSessionManager } from '../../core/document-session-manager.js';
 
 export default {
   name: 'sync-to-wordpress',
