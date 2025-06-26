@@ -107,11 +107,14 @@ graph TB
     PostCheck --> BulkExecute[Execute Bulk Operation]
     PageCheck --> BulkExecute
     
-    %% Error Handling
+    %% Error Handling and Recovery
     CMActions --> |On Error| ErrorHints[Error Recovery Hints]
     BEActions --> |On Error| ErrorHints
     PWActions --> |On Error| ErrorHints
+    ValidationWarnings --> |Guides| ErrorHints
     ErrorHints --> RecoverySuggestions[Recovery Suggestions]
+    ErrorHints --> |Specific Fixes| AttributeGuidance["Use individual parameters<br/>instead of attributes object"]
+    ErrorHints --> |Block Issues| BlockRecreation["Delete and recreate<br/>problematic blocks"]
     
     %% Response Flow
     SC --> Response["formatResponse<br/>(server.js)"]
@@ -125,9 +128,13 @@ graph TB
     FM --> WPClient["WordPressClient<br/>(wordpress-client.js)"]
     WPClient --> WPAPI[WordPress REST API]
     
-    %% Document Session Management
+    %% Document Session Management with Validation
     BE --> DSM["EnhancedDocumentSessionManager<br/>(enhanced-document-session-manager.js)"]
     DSM --> |Manages| Sessions[Active Editing Sessions]
+    DSM --> |Uses| BDS["BlockDocumentSession<br/>(block-document-session.js)"]
+    BDS --> |Non-blocking| ValidationWarnings[Validation Warnings Only]
+    DSM --> |Sync Process| AutoFixer["BlockAutoFixer<br/>(block-auto-fixer.js)"]
+    AutoFixer --> |Repairs| FixedBlocks[Fixed Blocks for WordPress]
     Sessions --> |Provides| Context[Block Context]
     Context --> BSC
 ```
@@ -157,6 +164,61 @@ Block Action → getSemanticBlockConfig() → Analyze Structure → Smart Defaul
 ### 5. Bulk Operation Auto-Detection Route
 ```
 Bulk Request → Try getPost() → Fallback getPage() → Execute Operation
+```
+
+### 6. Non-blocking Validation Route
+```
+Block Edit/Insert → Validate → Log Warnings → Continue Operation → Store Block
+```
+
+### 7. Auto-Fix Sync Route
+```
+Sync Request → Get Blocks → Auto-Fixer → Apply Fixes → Generate HTML → WordPress
+```
+
+## Validation and Auto-Fixing Flow
+
+```mermaid
+flowchart TD
+    A[Block Operation<br/>(edit/insert)] --> B[BlockDocumentSession]
+    B --> C{Validate Immediately?}
+    C -->|Yes| D[Run Validation]
+    C -->|No| E[Accept Block]
+    
+    D --> F{Validation Errors?}
+    F -->|Yes| G[Log Warnings<br/>Continue Operation]
+    F -->|No| E
+    G --> E
+    
+    E --> H[Block Stored in Session]
+    
+    %% Sync Process
+    H --> I[Sync Action Triggered]
+    I --> J[getContentForSync]
+    J --> K[BlockAutoFixer.fixBlocks]
+    
+    K --> L{Auto-fixable Issues?}
+    L -->|Yes| M[Apply Fixes]
+    L -->|No| N[Generate HTML]
+    
+    M --> O[Fix Heading Levels]
+    M --> P[Fix List Attributes]
+    M --> Q[Convert Problem Images]
+    M --> R[Add Missing IDs]
+    
+    O --> N
+    P --> N
+    Q --> N
+    R --> N
+    
+    N --> S{HTML Generation Success?}
+    S -->|Yes| T[Send to WordPress]
+    S -->|No| U[Fallback to Paragraphs]
+    
+    U --> V[Convert All to Paragraphs]
+    V --> T
+    
+    T --> W[Return with Fix Summary]
 ```
 
 ## Semantic Hint Flow
@@ -300,9 +362,23 @@ graph TB
   - Media uploads
   - Category/Tag management
 
-- **enhanced-document-session-manager.js**: Block editing sessions
-  - Session management
+- **enhanced-document-session-manager.js**: Block editing sessions with auto-fixing
+  - Session management 
   - Block operations (insert, edit, delete, reorder)
+  - Auto-fixer integration in sync process (getContentForSync, line ~186)
+  - Fallback to paragraph conversion (line ~198)
+
+- **block-document-session.js**: Non-blocking validation system
+  - editBlock() - warnings only, no blocking (modified validation flow)
+  - insertBlock() - warnings only, no blocking (modified validation flow)
+  - Validation warnings logged but operations continue
+
+- **block-auto-fixer.js**: Automatic block repair during sync
+  - fixBlocks() - main entry point for auto-fixing
+  - fixHeadingBlock() - ensure valid heading levels (1-6)
+  - fixListBlock() - repair list attributes (ordered, start)
+  - fixImageBlock() - convert problematic images to placeholders
+  - Auto-ID generation for blocks missing IDs
 
 ### Routing Methods in feature-mapper.js:
 - `executeContentAction()` (line 234) - Routes content-management actions
