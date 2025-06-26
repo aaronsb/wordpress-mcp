@@ -14,7 +14,7 @@ import { FeatureMapper } from './core/feature-mapper.js';
 import { WordPressClient } from './core/wordpress-client.js';
 import { ToolInjector } from './core/tool-injector.js';
 import { ToolContextProvider } from './core/tool-context-provider.js';
-import { DocumentSessionManager } from './core/document-session-manager.js';
+import { EnhancedDocumentSessionManager } from './core/enhanced-document-session-manager.js';
 
 // Load environment variables from multiple locations
 // 1. Local .env file in project root directory
@@ -63,7 +63,7 @@ class WordPressAuthorMCP {
     await this.featureMapper.initialize();
 
     // Initialize document session manager for block editing FIRST
-    this.documentSessionManager = new DocumentSessionManager();
+    this.documentSessionManager = new EnhancedDocumentSessionManager(this.wpClient);
 
     // Note: FeatureRegistry is no longer needed with unified 5-tool architecture
     // Individual feature files are replaced by semantic tools with action routing
