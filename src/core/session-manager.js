@@ -27,6 +27,10 @@ export class SessionManager {
     this.autoFixer = new BlockAutoFixer();
   }
 
+  generateHandle() {
+    return `wp-session-${Math.random().toString(36).substr(2, 16)}`;
+  }
+
   /**
    * Create a new editing session - always uses blocks
    */
